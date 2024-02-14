@@ -58,6 +58,11 @@ if (UNIX AND NOT APPLE)
     target_include_directories(libinputtino PUBLIC "src/uinput/include")
 endif ()
 
+option(BUILD_SERVER "Build REST server" OFF)
+if (BUILD_SERVER)
+    add_subdirectory(src/server)
+endif ()
+
 # All users of this library will need at least C++17
 target_compile_features(libinputtino PUBLIC cxx_std_17)
 set_target_properties(libinputtino PROPERTIES LINKER_LANGUAGE CXX)

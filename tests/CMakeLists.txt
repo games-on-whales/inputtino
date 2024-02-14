@@ -35,6 +35,12 @@ if (UNIX AND NOT APPLE)
     endif ()
 endif ()
 
+option(TEST_SERVER "Enable server test" OFF)
+if (TEST_SERVER)
+    list(APPEND SRC_LIST "testServer.cpp")
+    target_link_libraries(inputtino_tests PRIVATE inputtino::server)
+endif ()
+
 target_sources(inputtino_tests PRIVATE ${SRC_LIST})
 
 # I'm using C++17 in the test
