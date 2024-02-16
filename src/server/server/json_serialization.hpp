@@ -40,7 +40,8 @@ void to_json(json &j, const LocalDevice &device) {
     }
 
 
-    j = json{{"device_id",    device.device_id},
+    j = json{{"device_id",    std::to_string(
+            device.device_id)}, // sent as string since JS doesn't support unsigned long
              {"client_id",    device.client_id},
              {"type",         type},
              {"device_nodes", nodes}};
@@ -66,6 +67,6 @@ void to_json(json &j, const devices_map &devices) {
     }
 }
 
-void to_json(json &j, const ServerState &state){
+void to_json(json &j, const ServerState &state) {
     j = json{{"devices", state.devices}};
 }

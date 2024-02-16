@@ -30,11 +30,11 @@ handle_device(inputtino::Result<std::shared_ptr<T>> &result, httplib::Response &
 std::unique_ptr<httplib::Server> setup_rest_server(std::shared_ptr<immer::atom<ServerState>> state) {
     auto svr = std::make_unique<httplib::Server>();
 
-    svr->Get("/devices", [state](const httplib::Request &, httplib::Response &res) {
+    svr->Get("/api/v1.0/devices", [state](const httplib::Request &, httplib::Response &res) {
         res.set_content(json(state->load()).dump(), "application/json");
     });
 
-    svr->Post("/devices/add", [state](const httplib::Request &req, httplib::Response &res) {
+    svr->Post("/api/v1.0/devices/add", [state](const httplib::Request &req, httplib::Response &res) {
         auto payload = json::parse(req.body);
 
         state->update([&](const ServerState &state) {
@@ -50,7 +50,7 @@ std::unique_ptr<httplib::Server> setup_rest_server(std::shared_ptr<immer::atom<S
                     break;
                 }
                 case hash("joypad"): {
-                    auto joypad_type = to_lower((std::string) payload.value("type", "xbox"));
+                    auto joypad_type = to_lower((std::string) payload.value("joypad_type", "xbox"));
                     inputtino::Joypad::CONTROLLER_TYPE type;
                     switch (hash(joypad_type)) {
                         case hash("xbox"):
@@ -114,19 +114,17 @@ std::unique_ptr<httplib::Server> setup_rest_server(std::shared_ptr<immer::atom<S
         });
     });
 
-    svr->Delete("/devices/:id", [state](const httplib::Request &req, httplib::Response &res) {
-        std::size_t id = std::stoull(req.path_params.at("id"));
+    svr->Delete("/api/v1.0/devices/:id", [state](const httplib::Request &req, httplib::Response &res) {
+        std::size_t id = std::stoul(req.path_params.at("id"));
         state->update([id](const ServerState &state) {
-            ServerState new_state = state;
-            new_state.devices = state.devices.erase(id);
-            return new_state;
+            return ServerState{.devices = state.devices.erase(id)};
         });
         res.set_content(json{{"success", true}}.dump(), "application/json");
     });
 
     /* Mouse handlers */
-    svr->Post("/devices/mouse/:id/move_rel", [state](const httplib::Request &req, httplib::Response &res) {
-        std::size_t id = std::stoull(req.path_params.at("id"));
+    svr->Post("/api/v1.0/devices/mouse/:id/move_rel", [state](const httplib::Request &req, httplib::Response &res) {
+        std::size_t id = std::stoul(req.path_params.at("id"));
         auto payload = json::parse(req.body);
         double delta_x = payload.value("delta_x", 0.0);
         double delta_y = payload.value("delta_y", 0.0);

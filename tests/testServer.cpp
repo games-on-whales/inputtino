@@ -44,7 +44,7 @@ TEST_CASE("Test JSON serialization", "[server]") {
     parsed_payload = parsed_payload["devices"][0];
     REQUIRE_THAT(parsed_payload["type"], Equals("MOUSE"));
     REQUIRE_THAT(parsed_payload["client_id"], Equals("ID1"));
-    REQUIRE(parsed_payload["device_id"] == 0);
+    REQUIRE_THAT(parsed_payload["device_id"], Equals("0"));
     REQUIRE(parsed_payload["device_nodes"].size() >= 1);
 }
 
@@ -52,7 +52,7 @@ TEST_CASE_METHOD(HTTPServerFixture, "Test REST server", "[server]") {
     httplib::Client client(this->rest_ip, this->rest_port);
 
     { // Test GET /devices
-        auto res = client.Get("/devices");
+        auto res = client.Get("/api/v1.0/devices");
         REQUIRE(res);
         REQUIRE(res->status == 200);
         REQUIRE_THAT(res->body, Equals("{\"devices\":[]}")); // it starts empty
@@ -60,22 +60,22 @@ TEST_CASE_METHOD(HTTPServerFixture, "Test REST server", "[server]") {
 
     { // Test full device lifecycle
         // Test POST /devices/add (mouse)
-        auto res = client.Post("/devices/add", json{{"type", "MOUSE"}}.dump(), "application/json");
+        auto res = client.Post("/api/v1.0/devices/add", json{{"type", "MOUSE"}}.dump(), "application/json");
         REQUIRE(res);
         REQUIRE(res->status == 200);
         auto new_device = json::parse(res->body);
-        std::size_t device_id = new_device["device_id"];
+        std::string device_id = new_device["device_id"];
         REQUIRE_THAT(new_device["client_id"], Equals("127.0.0.1"));
         REQUIRE(new_device["device_nodes"].size() >= 1);
         REQUIRE_THAT(new_device["type"], Equals("MOUSE"));
-        REQUIRE(device_id > 0);
+        REQUIRE(!device_id.empty());
         // Are the nodes actually created on the host?
         for (auto node: new_device["device_nodes"]) {
             REQUIRE(std::filesystem::exists(node));
         }
 
         // Test that GET /devices lists the new device
-        res = client.Get("/devices");
+        res = client.Get("/api/v1.0/devices");
         REQUIRE(res);
         REQUIRE(res->status == 200);
         auto devices = json::parse(res->body);
@@ -88,7 +88,7 @@ TEST_CASE_METHOD(HTTPServerFixture, "Test REST server", "[server]") {
         REQUIRE(devices["device_id"] == new_device["device_id"]);
 
         // Test that we can move the mouse
-        res = client.Post("/devices/mouse/" + std::to_string(device_id) + "/move_rel",
+        res = client.Post("/api/v1.0/devices/mouse/" + device_id + "/move_rel",
                           json{{"delta_x", 100},
                                {"delta_y", 100}}.dump(),
                           "application/json");
@@ -97,10 +97,10 @@ TEST_CASE_METHOD(HTTPServerFixture, "Test REST server", "[server]") {
         // TODO: check with libinput that the mouse actually moved
 
         // Test that DELETE /devices/<device_id> removes the device
-        res = client.Delete("/devices/" + std::to_string(device_id));
+        res = client.Delete("/api/v1.0/devices/" + device_id);
         REQUIRE(res);
         REQUIRE(res->status == 200);
-        res = client.Get("/devices");
+        res = client.Get("/api/v1.0/devices");
         REQUIRE(json::parse(res->body)["devices"].empty());
         // Are the nodes actually removed from the host?
         for (auto node: new_device["device_nodes"]) {
@@ -109,7 +109,7 @@ TEST_CASE_METHOD(HTTPServerFixture, "Test REST server", "[server]") {
     }
 
     { // Test POST /devices/add without type
-        auto res = client.Post("/devices/add", "{}", "application/json");
+        auto res = client.Post("/api/v1.0/devices/add", "{}", "application/json");
         REQUIRE(res);
         REQUIRE(res->status == 500);
         REQUIRE_THAT(res->body, ContainsSubstring("key 'type' not found"));

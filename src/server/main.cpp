@@ -9,6 +9,10 @@ int main() {
     auto rest_ip = get_env("INPUTTINO_REST_IP", "0.0.0.0");
     auto rest_port = std::stoi(get_env("INPUTTINO_REST_PORT", "8080"));
     auto svr = setup_rest_server(state);
+    auto file_path = get_env("INPUTTINO_CLIENT_PATH", "./src/server/client/dist");
+    if (!svr->set_mount_point("/", file_path)) {
+        std::cerr << "Failed to set mount point: " << file_path << std::endl;
+    }
     auto svr_thread = std::thread([svr = std::move(svr), rest_ip, rest_port]() {
         svr->set_read_timeout(5, 0); // 5 seconds
         svr->set_write_timeout(5, 0); // 5 seconds
