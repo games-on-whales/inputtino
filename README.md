@@ -13,7 +13,15 @@ Supports:
     - Supports callbacks on Rumble events
     - [WIP] Gyro and Acceleration support
 
-## Include in your own project
+## Use the REST API
+
+**WIP**: A simple JSON REST API to consume this library 
+
+```bash
+docker run --init --name inputtino -p 8080:8080 -v /dev/input:/dev/input:rw --device /dev/uinput ghcr.io/games-on-whales/inputtino:stable
+```
+
+## Include in a C++ project
 
 If using `Cmake` it's as simple as
 
