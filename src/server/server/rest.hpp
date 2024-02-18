@@ -27,6 +27,25 @@ handle_device(inputtino::Result<std::shared_ptr<T>> &result, httplib::Response &
     }
 }
 
+/**
+ * Turns a string into a MOUSE_BUTTON
+ */
+static inputtino::Mouse::MOUSE_BUTTON
+to_mouse_button(const std::string &button) {
+    switch (hash(to_lower(button))) {
+        case hash("left"):
+            return inputtino::Mouse::MOUSE_BUTTON::LEFT;
+        case hash("right"):
+            return inputtino::Mouse::MOUSE_BUTTON::RIGHT;
+        case hash("middle"):
+            return inputtino::Mouse::MOUSE_BUTTON::MIDDLE;
+        case hash("side"):
+            return inputtino::Mouse::MOUSE_BUTTON::SIDE;
+        case hash("extra"):
+            return inputtino::Mouse::MOUSE_BUTTON::EXTRA;
+    }
+}
+
 std::unique_ptr<httplib::Server> setup_rest_server(std::shared_ptr<immer::atom<ServerState>> state) {
     auto svr = std::make_unique<httplib::Server>();
 
@@ -126,15 +145,55 @@ std::unique_ptr<httplib::Server> setup_rest_server(std::shared_ptr<immer::atom<S
     svr->Post("/api/v1.0/devices/mouse/:id/move_rel", [state](const httplib::Request &req, httplib::Response &res) {
         std::size_t id = std::stoul(req.path_params.at("id"));
         auto payload = json::parse(req.body);
-        double delta_x = payload.value("delta_x", 0.0);
-        double delta_y = payload.value("delta_y", 0.0);
         auto device = state->load()->devices.at(id);
         auto mouse = std::get<std::shared_ptr<inputtino::Mouse>>(device->device);
-        mouse->move(delta_x, delta_y);
+        mouse->move(payload.value("delta_x", 0.0), payload.value("delta_y", 0.0));
         res.set_content(json{{"success", true}}.dump(), "application/json");
     });
 
-    // TODO: implement all other handlers...
+    svr->Post("/api/v1.0/devices/mouse/:id/move_abs", [state](const httplib::Request &req, httplib::Response &res) {
+        std::size_t id = std::stoul(req.path_params.at("id"));
+        auto payload = json::parse(req.body);
+        auto device = state->load()->devices.at(id);
+        auto mouse = std::get<std::shared_ptr<inputtino::Mouse>>(device->device);
+        mouse->move_abs(payload.value("abs_x", 0.0), payload.value("abs_y", 0.0), payload.value("screen_width", 0.0),
+                        payload.value("screen_height", 0.0));
+        res.set_content(json{{"success", true}}.dump(), "application/json");
+    });
+
+    svr->Post("/api/v1.0/devices/mouse/:id/press", [state](const httplib::Request &req, httplib::Response &res) {
+        std::size_t id = std::stoul(req.path_params.at("id"));
+        auto payload = json::parse(req.body);
+        auto device = state->load()->devices.at(id);
+        auto mouse = std::get<std::shared_ptr<inputtino::Mouse>>(device->device);
+        mouse->press(to_mouse_button(payload.value("button", "LEFT")));
+        res.set_content(json{{"success", true}}.dump(), "application/json");
+    });
+
+    svr->Post("/api/v1.0/devices/mouse/:id/release", [state](const httplib::Request &req, httplib::Response &res) {
+        std::size_t id = std::stoul(req.path_params.at("id"));
+        auto payload = json::parse(req.body);
+        auto device = state->load()->devices.at(id);
+        auto mouse = std::get<std::shared_ptr<inputtino::Mouse>>(device->device);
+        mouse->release(to_mouse_button(payload.value("button", "LEFT")));
+        res.set_content(json{{"success", true}}.dump(), "application/json");
+    });
+
+    svr->Post("/api/v1.0/devices/mouse/:id/scroll", [state](const httplib::Request &req, httplib::Response &res) {
+        std::size_t id = std::stoul(req.path_params.at("id"));
+        auto payload = json::parse(req.body);
+        auto device = state->load()->devices.at(id);
+        auto mouse = std::get<std::shared_ptr<inputtino::Mouse>>(device->device);
+        switch (hash(to_lower(payload.value("direction", "vertical")))) {
+            case hash("vertical"):
+                mouse->vertical_scroll(payload.value("distance", 0.0));
+                break;
+            case hash("horizontal"):
+                mouse->horizontal_scroll(payload.value("distance", 0.0));
+                break;
+        }
+        res.set_content(json{{"success", true}}.dump(), "application/json");
+    });
 
     /* Default error handling */
     svr->set_exception_handler([](const auto &req, auto &res, std::exception_ptr ep) {

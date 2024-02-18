@@ -5,6 +5,8 @@
     import AddDevice from "./lib/AddDevice.svelte";
     import RemoveDevice from "./lib/RemoveDevice.svelte";
     import FetchRequest from "./lib/FetchRequest.svelte";
+    import {selected_device} from "./lib/stores";
+    import Mouse from "./lib/Mouse.svelte";
     import {Toolbar, ToolbarGroup, DarkMode, Toast} from 'flowbite-svelte';
     import {FireOutline} from "flowbite-svelte-icons";
 </script>
@@ -18,7 +20,11 @@
         <DarkMode slot="end"/>
     </Toolbar>
 
-    <FetchRequest />
+    {#if $selected_device?.type === "MOUSE"}
+        <Mouse/>
+    {/if}
+
+    <FetchRequest/>
 </main>
 
 <style>
