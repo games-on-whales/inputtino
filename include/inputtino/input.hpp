@@ -261,7 +261,7 @@ public:
 
   static Result<std::shared_ptr<Joypad>> create(CONTROLLER_TYPE type, uint8_t capabilities);
 
-  Joypad(const Joypad &j) : _state(std::move(j._state)) {}
+  Joypad(const Joypad &j) : _state(j._state) {}
   Joypad(Joypad &&j) : _state(std::move(j._state)) {}
 
   std::vector<std::string> get_nodes() const override;
