@@ -41,7 +41,7 @@ to_mouse_button(const std::string &button) {
             return inputtino::Mouse::MOUSE_BUTTON::MIDDLE;
         case hash("side"):
             return inputtino::Mouse::MOUSE_BUTTON::SIDE;
-        case hash("extra"):
+        default:
             return inputtino::Mouse::MOUSE_BUTTON::EXTRA;
     }
 }
@@ -69,28 +69,28 @@ std::unique_ptr<httplib::Server> setup_rest_server(std::shared_ptr<immer::atom<S
                     break;
                 }
                 case hash("joypad"): {
-                    auto joypad_type = to_lower((std::string) payload.value("joypad_type", "xbox"));
-                    inputtino::Joypad::CONTROLLER_TYPE type;
-                    switch (hash(joypad_type)) {
-                        case hash("xbox"):
-                            type = inputtino::Joypad::CONTROLLER_TYPE::XBOX;
-                            break;
-                        case hash("ps"):
-                            type = inputtino::Joypad::CONTROLLER_TYPE::PS;
-                            break;
-                        case hash("nintendo"):
-                            type = inputtino::Joypad::CONTROLLER_TYPE::NINTENDO;
-                            break;
-                        default:
-                            handle_error(res, "Unknown joypad type: " + joypad_type);
-                    }
-
-                    // TODO: ["ANALOG_TRIGGERS, "RUMBLE"] --> uint8_t
-                    uint8_t capabilities = payload.value("capabilities", 0);
-
-                    auto joypad = inputtino::Joypad::create(type, capabilities);
-                    success = handle_device(joypad, res, new_device);
-                    new_device.type = DeviceType::JOYPAD;
+//                    auto joypad_type = to_lower((std::string) payload.value("joypad_type", "xbox"));
+//                    inputtino::Joypad::CONTROLLER_TYPE type;
+//                    switch (hash(joypad_type)) {
+//                        case hash("xbox"):
+//                            type = inputtino::Joypad::CONTROLLER_TYPE::XBOX;
+//                            break;
+//                        case hash("ps"):
+//                            type = inputtino::Joypad::CONTROLLER_TYPE::PS;
+//                            break;
+//                        case hash("nintendo"):
+//                            type = inputtino::Joypad::CONTROLLER_TYPE::NINTENDO;
+//                            break;
+//                        default:
+//                            handle_error(res, "Unknown joypad type: " + joypad_type);
+//                    }
+//
+//                    // TODO: ["ANALOG_TRIGGERS, "RUMBLE"] --> uint8_t
+//                    uint8_t capabilities = payload.value("capabilities", 0);
+//
+//                    auto joypad = inputtino::Joypad::create(type, capabilities);
+//                    success = handle_device(joypad, res, new_device);
+//                    new_device.type = DeviceType::JOYPAD;
                     break;
                 }
                 case hash("mouse"): {

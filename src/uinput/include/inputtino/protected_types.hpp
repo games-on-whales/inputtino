@@ -5,10 +5,10 @@
 #include <iostream>
 #include <libevdev/libevdev-uinput.h>
 #include <libevdev/libevdev.h>
-#include <unistd.h>
 #include <thread>
+#include <unistd.h>
 
-namespace inputtino{
+namespace inputtino {
 
 using libevdev_uinput_ptr = std::shared_ptr<libevdev_uinput>;
 using libevdev_event_ptr = std::shared_ptr<input_event>;
@@ -38,29 +38,18 @@ struct PenTabletState {
   PenTablet::TOOL_TYPE last_tool = PenTablet::SAME_AS_BEFORE;
 };
 
-struct JoypadState {
-  Joypad::CONTROLLER_TYPE type;
-
+struct BaseJoypadState {
   libevdev_uinput_ptr joy = nullptr;
   int currently_pressed_btns = 0;
-
-  std::shared_ptr<Trackpad> trackpad = nullptr;
-
-  // We have to keep around if triggers are moving so that we can properly control BTN_TR2/BTN_TL2
-  bool tr_moving = false;
-  bool tl_moving = false;
-
-  libevdev_uinput_ptr motion_sensor = nullptr;
-  /* see: MSC_TIMESTAMP */
-  std::chrono::time_point<std::chrono::steady_clock> motion_sensor_startup_time = std::chrono::steady_clock::now();
 
   bool stop_listening_events = false;
   std::thread events_thread;
 
   std::optional<std::function<void(int low_freq, int high_freq)>> on_rumble = std::nullopt;
-  std::optional<std::function<void(int r, int g, int b)>> on_led = std::nullopt;
 };
 
+struct XboxOneJoypadState : BaseJoypadState {};
+struct SwitchJoypadState : BaseJoypadState {};
 
 struct KeyboardState {
   std::thread repeat_press_t;
@@ -118,4 +107,4 @@ struct TrackpadState {
   std::map<int /* finger_id */, int /* MT_SLOT */> fingers;
 };
 
-}
+} // namespace inputtino

@@ -28,7 +28,7 @@ public:
   static Result<std::shared_ptr<Mouse>> create();
 
   Mouse(const Mouse &j) : _state(j._state) {}
-  Mouse(Mouse &&j) : _state(std::move(j._state)) {}
+  Mouse(Mouse &&j) noexcept : _state(std::move(j._state)) {}
   std::vector<std::string> get_nodes() const override;
 
   void move(int delta_x, int delta_y);
@@ -101,7 +101,7 @@ class Trackpad : public VirtualDevice {
 public:
   static Result<std::shared_ptr<Trackpad>> create();
   Trackpad(const Trackpad &j) : _state(j._state) {}
-  Trackpad(Trackpad &&j) : _state(std::move(j._state)) {}
+  Trackpad(Trackpad &&j) noexcept : _state(std::move(j._state)) {}
   std::vector<std::string> get_nodes() const override;
 
   /**
@@ -134,7 +134,7 @@ class TouchScreen : public VirtualDevice {
 public:
   static Result<std::shared_ptr<TouchScreen>> create();
   TouchScreen(const TouchScreen &j) : _state(j._state) {}
-  TouchScreen(TouchScreen &&j) : _state(std::move(j._state)) {}
+  TouchScreen(TouchScreen &&j) noexcept : _state(std::move(j._state)) {}
   std::vector<std::string> get_nodes() const override;
 
   /**
@@ -219,7 +219,7 @@ class Keyboard : public VirtualDevice {
 public:
   static Result<std::shared_ptr<Keyboard>> create(std::chrono::milliseconds timeout_repress_key = 50ms);
   Keyboard(const Keyboard &j) : _state(j._state) {}
-  Keyboard(Keyboard &&j) : _state(std::move(j._state)) {}
+  Keyboard(Keyboard &&j) noexcept : _state(std::move(j._state)) {}
 
   std::vector<std::string> get_nodes() const override;
 
@@ -236,36 +236,10 @@ private:
 };
 
 /**
- * An abstraction on top of a virtual joypad
- * In order to support callbacks (ex: on_rumble()) this will create a new thread for listening for such events
+ * Base class for all joypads, they at the very least have to implement buttons and triggers
  */
 class Joypad : public VirtualDevice {
 public:
-  enum CONTROLLER_TYPE : uint8_t {
-    UNKNOWN = 0x00,
-    XBOX = 0x01,
-    PS = 0x02,
-    NINTENDO = 0x03
-  };
-
-  enum CONTROLLER_CAPABILITIES : uint8_t {
-    ANALOG_TRIGGERS = 0x01,
-    RUMBLE = 0x02,
-    TRIGGER_RUMBLE = 0x04,
-    TOUCHPAD = 0x08,
-    ACCELEROMETER = 0x10,
-    GYRO = 0x20,
-    BATTERY = 0x40,
-    RGB_LED = 0x80
-  };
-
-  static Result<std::shared_ptr<Joypad>> create(CONTROLLER_TYPE type, uint8_t capabilities);
-
-  Joypad(const Joypad &j) : _state(j._state) {}
-  Joypad(Joypad &&j) : _state(std::move(j._state)) {}
-
-  std::vector<std::string> get_nodes() const override;
-
   enum CONTROLLER_BTN : int {
     DPAD_UP = 0x0001,
     DPAD_DOWN = 0x0002,
@@ -295,6 +269,11 @@ public:
     Y = 0x8000
   };
 
+  enum STICK_POSITION {
+    RS,
+    LS
+  };
+
   /**
    * Given the nature of joypads we (might) have to simultaneously press and release multiple buttons.
    * In order to implement this, you can pass a single short: button_flags which represent the currently pressed
@@ -304,23 +283,70 @@ public:
    *
    * Example: previous state had `DPAD_UP` and `A` -> user release `A` -> new state only has `DPAD_UP`
    */
-  void set_pressed_buttons(int newly_pressed);
+  virtual void set_pressed_buttons(int newly_pressed) = 0;
 
-  void set_triggers(int16_t left, int16_t right);
+  virtual void set_triggers(int16_t left, int16_t right) = 0;
 
-  enum STICK_POSITION {
-    RS,
-    LS
-  };
+  virtual void set_stick(STICK_POSITION stick_type, short x, short y) = 0;
+};
 
-  void set_stick(STICK_POSITION stick_type, short x, short y);
+class XboxOneJoypad : public Joypad {
+public:
+  static Result<std::shared_ptr<XboxOneJoypad>> create();
+  XboxOneJoypad(const XboxOneJoypad &j) : _state(j._state) {}
+  XboxOneJoypad(XboxOneJoypad &&j) noexcept : _state(std::move(j._state)) {}
 
+  std::vector<std::string> get_nodes() const override;
+
+  void set_pressed_buttons(int newly_pressed) override;
+  void set_triggers(int16_t left, int16_t right) override;
+  void set_stick(STICK_POSITION stick_type, short x, short y) override;
   void set_on_rumble(const std::function<void(int low_freq, int high_freq)> &callback);
 
-  /**
-   * If the joypad has been created with the TOUCHPAD capability this will return the associated trackpad
-   */
-  std::shared_ptr<Trackpad> get_trackpad() const;
+protected:
+  typedef struct XboxOneJoypadState XboxOneJoypadState;
+  std::shared_ptr<XboxOneJoypadState> _state;
+
+private:
+  XboxOneJoypad();
+};
+
+class SwitchJoypad : public Joypad {
+public:
+  static Result<std::shared_ptr<SwitchJoypad>> create();
+  SwitchJoypad(const SwitchJoypad &j) : _state(j._state) {}
+  SwitchJoypad(SwitchJoypad &&j) : _state(std::move(j._state)) {}
+
+  std::vector<std::string> get_nodes() const override;
+
+  void set_pressed_buttons(int newly_pressed) override;
+  void set_triggers(int16_t left, int16_t right) override;
+  void set_stick(STICK_POSITION stick_type, short x, short y) override;
+  void set_on_rumble(const std::function<void(int low_freq, int high_freq)> &callback);
+
+protected:
+  typedef struct XboxOneJoypadState SwitchJoypadState;
+  std::shared_ptr<SwitchJoypadState> _state;
+
+private:
+  SwitchJoypad();
+};
+
+class PS5Joypad : public Joypad {
+public:
+  static Result<std::shared_ptr<PS5Joypad>> create();
+  PS5Joypad(const PS5Joypad &j) : _state(j._state) {}
+  PS5Joypad(PS5Joypad &&j)  noexcept : _state(std::move(j._state)) {}
+
+  std::vector<std::string> get_nodes() const override;
+
+  void set_pressed_buttons(int newly_pressed) override;
+  void set_triggers(int16_t left, int16_t right) override;
+  void set_stick(STICK_POSITION stick_type, short x, short y) override;
+  void set_on_rumble(const std::function<void(int low_freq, int high_freq)> &callback);
+
+  void place_finger(int finger_nr, float x, float y, float pressure, int orientation);
+  void release_finger(int finger_nr);
 
   enum MOTION_TYPE : uint8_t {
     ACCELERATION = 0x01,
@@ -343,10 +369,10 @@ public:
   void set_on_led(const std::function<void(int r, int g, int b)> &callback);
 
 protected:
-  typedef struct JoypadState JoypadState;
-  std::shared_ptr<JoypadState> _state;
+  typedef struct PS5JoypadState PS5JoypadState;
+  std::shared_ptr<PS5JoypadState> _state;
 
 private:
-  Joypad();
+  PS5Joypad();
 };
 } // namespace inputtino
