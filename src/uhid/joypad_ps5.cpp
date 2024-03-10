@@ -126,7 +126,7 @@ Result<std::shared_ptr<PS5Joypad>> PS5Joypad::create() {
       .bus = BUS_USB,
       .vendor = 0x054C,
       .product = 0x0CE6,
-      .version = 0x00AB,
+      .version = 0x8111,
       .country = 0,
       .report_description = {&uhid::ps5_rdesc[0], &uhid::ps5_rdesc[0] + sizeof(uhid::ps5_rdesc)}};
 
@@ -215,21 +215,21 @@ void PS5Joypad::set_pressed_buttons(int pressed) {
       this->_state->current_state.buttons[2] |= uhid::TOUCHPAD;
     if (HOME & pressed)
       this->_state->current_state.buttons[2] |= uhid::PS_HOME;
-    if(MISC_FLAG & pressed)
+    if (MISC_FLAG & pressed)
       this->_state->current_state.buttons[2] |= uhid::MIC_MUTE;
   }
   send_report(*this->_state);
 }
 void PS5Joypad::set_triggers(int16_t left, int16_t right) {
-  this->_state->current_state.rx = scale_value(left, 0, 255, uhid::PS5_AXIS_MIN, uhid::PS5_AXIS_MAX);
-  this->_state->current_state.ry = scale_value(right, 0, 255, uhid::PS5_AXIS_MIN, uhid::PS5_AXIS_MAX);
+  this->_state->current_state.z = scale_value(left, 0, 255, uhid::PS5_AXIS_MIN, uhid::PS5_AXIS_MAX);
+  this->_state->current_state.rz = scale_value(right, 0, 255, uhid::PS5_AXIS_MIN, uhid::PS5_AXIS_MAX);
   send_report(*this->_state);
 }
 void PS5Joypad::set_stick(Joypad::STICK_POSITION stick_type, short x, short y) {
   switch (stick_type) {
   case RS: {
-    this->_state->current_state.z = scale_value(x, -32768, 32767, uhid::PS5_AXIS_MIN, uhid::PS5_AXIS_MAX);
-    this->_state->current_state.rz = scale_value(y, -32768, 32767, uhid::PS5_AXIS_MIN, uhid::PS5_AXIS_MAX);
+    this->_state->current_state.rx = scale_value(x, -32768, 32767, uhid::PS5_AXIS_MIN, uhid::PS5_AXIS_MAX);
+    this->_state->current_state.ry = scale_value(y, -32768, 32767, uhid::PS5_AXIS_MIN, uhid::PS5_AXIS_MAX);
     send_report(*this->_state);
     break;
   }
@@ -244,8 +244,31 @@ void PS5Joypad::set_stick(Joypad::STICK_POSITION stick_type, short x, short y) {
 void PS5Joypad::set_on_rumble(const std::function<void(int, int)> &callback) {
   this->_state->on_rumble = callback;
 }
+
+static inline float rad2deg(float rad) {
+  return rad * (180.0f / (float)M_PI);
+}
+
 void PS5Joypad::set_motion(PS5Joypad::MOTION_TYPE type, float x, float y, float z) {
-  // TODO
+  switch (type) {
+  case ACCELERATION: {
+    this->_state->current_state.accel[0] = htole16((x * uhid::SDL_STANDARD_GRAVITY * 100));
+    this->_state->current_state.accel[1] = htole16((y * uhid::SDL_STANDARD_GRAVITY * 100));
+    this->_state->current_state.accel[2] = htole16((z * uhid::SDL_STANDARD_GRAVITY * 100));
+    send_report(*this->_state);
+    break;
+  }
+  case GYROSCOPE: {
+    this->_state->current_state.gyro[0] =
+        htole16(rad2deg((x + uhid::gyro_calib_bias) / uhid::gyro_calib_pitch_denom) * uhid::PS5_GYRO_RES_PER_DEG_S * 5);
+    this->_state->current_state.gyro[1] =
+        htole16(rad2deg((y + uhid::gyro_calib_bias) / uhid::gyro_calib_yaw_denom) * uhid::PS5_GYRO_RES_PER_DEG_S * 5);
+    this->_state->current_state.gyro[2] =
+        htole16(rad2deg((z + uhid::gyro_calib_bias) / uhid::gyro_calib_roll_denom) * uhid::PS5_GYRO_RES_PER_DEG_S * 5);
+    send_report(*this->_state);
+    break;
+  }
+  }
 }
 void PS5Joypad::set_battery(PS5Joypad::BATTERY_STATE state, int percentage) {
   // TODO

@@ -353,6 +353,13 @@ public:
     GYROSCOPE = 0x02
   };
 
+  /**
+   * Acceleration should report data in m/s^2 (inclusive of gravitational acceleration).
+   * Gyroscope should report data in deg/s.
+   *
+   * The x/y/z axis assignments follow SDL's convention documented here:
+   * https://github.com/libsdl-org/SDL/blob/96720f335002bef62115e39327940df454d78f6c/include/SDL3/SDL_sensor.h#L80-L124
+   */
   void set_motion(MOTION_TYPE type, float x, float y, float z);
 
   enum BATTERY_STATE : uint8_t {

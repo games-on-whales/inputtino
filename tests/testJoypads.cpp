@@ -5,6 +5,7 @@
 #include <thread>
 
 using Catch::Matchers::Equals;
+using Catch::Matchers::WithinAbs;
 using namespace inputtino;
 
 void flush_sdl_events() {
@@ -88,6 +89,9 @@ TEST_CASE_METHOD(SDLTestsFixture, "PS Joypad", "[SDL]") {
 
   std::this_thread::sleep_for(250ms);
 
+  SDL_SetHint(SDL_HINT_JOYSTICK_HIDAPI_PS5, "1");
+  SDL_SetHint(SDL_HINT_JOYSTICK_HIDAPI_PS5_RUMBLE, "1");
+  SDL_SetHint(SDL_HINT_JOYSTICK_HIDAPI_PS5_PLAYER_LED, "1");
   // Initializing the controller
   flush_sdl_events();
   SDL_GameController *gc = SDL_GameControllerOpen(0);
@@ -97,14 +101,6 @@ TEST_CASE_METHOD(SDLTestsFixture, "PS Joypad", "[SDL]") {
   REQUIRE(gc);
 
   REQUIRE(SDL_GameControllerGetType(gc) == SDL_CONTROLLER_TYPE_PS5);
-  REQUIRE(SDL_GameControllerHasSensor(gc, SDL_SENSOR_GYRO));
-  REQUIRE(SDL_GameControllerHasSensor(gc, SDL_SENSOR_ACCEL));
-  if (SDL_GameControllerSetSensorEnabled(gc, SDL_SENSOR_ACCEL, SDL_TRUE) != 0) {
-    WARN(SDL_GetError());
-  }
-  if (SDL_GameControllerSetSensorEnabled(gc, SDL_SENSOR_GYRO, SDL_TRUE) != 0) {
-    WARN(SDL_GetError());
-  }
 
   { // Rumble
     // Checking for basic capability
@@ -126,26 +122,27 @@ TEST_CASE_METHOD(SDLTestsFixture, "PS Joypad", "[SDL]") {
 
   { // LED
     // Unfortunately LINUX_JoystickSetLED is not implemented in SDL2
-    //    REQUIRE(SDL_GameControllerHasLED(gc));
-    //    struct LED {
-    //      int r;
-    //      int g;
-    //      int b;
-    //    };
-    //    auto led_data = std::make_shared<LED>();
-    //    joypad.set_on_led([led_data](int r, int g, int b) {
-    //      led_data->r = r;
-    //      led_data->g = g;
-    //      led_data->b = b;
-    //    });
-    //    SDL_GameControllerSetLED(gc, 50, 100, 150);
-    //    std::this_thread::sleep_for(30ms); // wait for the effect to be picked up
-    //    REQUIRE(led_data->r == 50);
-    //    REQUIRE(led_data->g == 100);
-    //    REQUIRE(led_data->b == 150);
+    //        REQUIRE(SDL_GameControllerHasLED(gc));
+    //        struct LED {
+    //          int r;
+    //          int g;
+    //          int b;
+    //        };
+    //        auto led_data = std::make_shared<LED>();
+    //        joypad.set_on_led([led_data](int r, int g, int b) {
+    //          led_data->r = r;
+    //          led_data->g = g;
+    //          led_data->b = b;
+    //        });
+    //        SDL_GameControllerSetLED(gc, 50, 100, 150);
+    //        std::this_thread::sleep_for(30ms); // wait for the effect to be picked up
+    //        REQUIRE(led_data->r == 50);
+    //        REQUIRE(led_data->g == 100);
+    //        REQUIRE(led_data->b == 150);
   }
 
-  { // Sticks
+  test_buttons(gc, joypad); // TODO: fix failing buttons
+  {                         // Sticks
     REQUIRE(SDL_GameControllerHasAxis(gc, SDL_CONTROLLER_AXIS_LEFTX));
     REQUIRE(SDL_GameControllerHasAxis(gc, SDL_CONTROLLER_AXIS_LEFTY));
     REQUIRE(SDL_GameControllerHasAxis(gc, SDL_CONTROLLER_AXIS_RIGHTX));
@@ -173,12 +170,61 @@ TEST_CASE_METHOD(SDLTestsFixture, "PS Joypad", "[SDL]") {
     REQUIRE(SDL_GameControllerGetAxis(gc, SDL_CONTROLLER_AXIS_TRIGGERLEFT) == 0);
     REQUIRE(SDL_GameControllerGetAxis(gc, SDL_CONTROLLER_AXIS_TRIGGERRIGHT) == 0);
   }
+  { // test acceleration
+    REQUIRE(SDL_GameControllerHasSensor(gc, SDL_SENSOR_ACCEL));
+    if (SDL_GameControllerSetSensorEnabled(gc, SDL_SENSOR_ACCEL, SDL_TRUE) != 0) {
+      WARN(SDL_GetError());
+    }
 
-  test_buttons(gc, joypad); // TODO: fix failing buttons
-  // TODO: test gyro and acceleration
+    std::array<float, 3> acceleration_data = {9.8f, 0.0f, 20.0f};
+    joypad.set_motion(inputtino::PS5Joypad::ACCELERATION,
+                      acceleration_data[0],
+                      acceleration_data[1],
+                      acceleration_data[2]);
+    SDL_GameControllerUpdate();
+    SDL_SensorUpdate();
+    SDL_Event event;
+    while (SDL_PollEvent(&event) != 0) {
+      if (event.type == SDL_CONTROLLERSENSORUPDATE) {
+        break;
+      }
+    }
+    REQUIRE(event.type == SDL_CONTROLLERSENSORUPDATE);
+    REQUIRE(event.csensor.sensor == SDL_SENSOR_ACCEL);
+    REQUIRE_THAT(event.csensor.data[0], WithinAbs(acceleration_data[0], 0.9f));
+    REQUIRE_THAT(event.csensor.data[1], WithinAbs(acceleration_data[1], 0.9f));
+    REQUIRE_THAT(event.csensor.data[2], WithinAbs(acceleration_data[2], 0.9f));
+    flush_sdl_events();
+  }
+  { // test gyro
+    REQUIRE(SDL_GameControllerHasSensor(gc, SDL_SENSOR_GYRO));
+    if (SDL_GameControllerSetSensorEnabled(gc, SDL_SENSOR_GYRO, SDL_TRUE) != 0) {
+      WARN(SDL_GetError());
+    }
+
+    std::array<float, 3> gyro_data = {0.0f, 10.0f, 20.0f};
+    joypad.set_motion(inputtino::PS5Joypad::GYROSCOPE, gyro_data[0], gyro_data[1], gyro_data[2]);
+    std::this_thread::sleep_for(10ms);
+    joypad.set_motion(inputtino::PS5Joypad::GYROSCOPE, gyro_data[0], gyro_data[1], gyro_data[2]);
+
+    SDL_GameControllerUpdate();
+    SDL_SensorUpdate();
+    SDL_Event event;
+    while (SDL_PollEvent(&event) != 0) {
+      if (event.type == SDL_CONTROLLERSENSORUPDATE) {
+        break;
+      }
+    }
+    REQUIRE(event.type == SDL_CONTROLLERSENSORUPDATE);
+    REQUIRE(event.csensor.sensor == SDL_SENSOR_GYRO);
+    REQUIRE_THAT(event.csensor.data[0], WithinAbs(gyro_data[0], 0.001f));
+    REQUIRE_THAT(event.csensor.data[1], WithinAbs(gyro_data[1], 0.001f));
+    REQUIRE_THAT(event.csensor.data[2], WithinAbs(gyro_data[2], 0.001f));
+  }
   // TODO: test touchpad
   // TODO: test battery
-  // TODO: adaptive triggers?
+  // Adaptive triggers aren't supported by SDL
+  // see:https://github.com/libsdl-org/SDL/issues/5125#issuecomment-1204261666
 
   SDL_GameControllerClose(gc);
 }

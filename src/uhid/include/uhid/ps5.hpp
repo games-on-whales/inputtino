@@ -12,6 +12,17 @@ static constexpr int PS5_AXIS_MIN = 0;
 static constexpr int PS5_AXIS_MAX = 0xFF;
 static constexpr int PS5_AXIS_NEUTRAL = 0x80;
 
+/*
+ * DualSense hardware limits
+ */
+static constexpr int PS5_ACC_RES_PER_G = 8192;
+static constexpr int PS5_ACC_RANGE = (4 * PS5_ACC_RES_PER_G);
+static constexpr int PS5_GYRO_RES_PER_DEG_S = 1024;
+static constexpr int PS5_GYRO_RANGE = (2048 * PS5_GYRO_RES_PER_DEG_S);
+static constexpr int PS5_TOUCHPAD_WIDTH = 1920;
+static constexpr int PS5_TOUCHPAD_HEIGHT = 1080;
+static constexpr float SDL_STANDARD_GRAVITY = 9.80665f;
+
 /**
  * Taken from: https://github.com/nondebug/dualsense/blob/main/report-descriptor-usb.txt
  * and verified manually using hid-decode
@@ -160,10 +171,114 @@ enum PS5_REPORT_TYPES : unsigned int {
 };
 
 static constexpr unsigned char ps5_calibration_info[] = {
-    0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x27, 0xF0, 0xD8, 0x10, 0x27, 0xF0,
-    0xD8, 0x10, 0x27, 0xF0, 0xD8, 0xF4, 0x01, 0xF4, 0x01, 0x10, 0x27, 0xF0, 0xD8, 0x10,
-    0x27, 0xF0, 0xD8, 0x10, 0x27, 0xF0, 0xD8, 0x0B, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x05,
+    0x00, // gyro_pitch_bias
+    0x00,
+    0x00, // gyro_yaw_bias
+    0x00,
+    0x00, // gyro_roll_bias
+    0x00,
+    0x10, // gyro_pitch_plus
+    0x27,
+    0xF0, // gyro_pitch_minus
+    0xD8,
+    0x10, // gyro_yaw_plus
+    0x27,
+    0xF0, // gyro_yaw_minus
+    0xD8,
+    0x10, // gyro_roll_plus
+    0x27,
+    0xF0, // gyro_roll_minus
+    0xD8,
+    0xF4, // gyro_speed_plus
+    0x01,
+    0xF4, // gyro_speed_minus
+    0x01,
+    0x10, // acc_x_plus
+    0x27,
+    0xF0, // acc_x_minus
+    0xD8,
+    0x10, // acc_y_plus
+    0x27,
+    0xF0, // acc_y_minus
+    0xD8,
+    0x10, // acc_z_plus
+    0x27,
+    0xF0, // acc_z_minus
+    0xD8, 0x0B, 0x00, 0x00, 0x00, 0x00, 0x00,
 };
+
+static constexpr int gyro_calib_bias = 0;
+
+/**
+ * see:
+ * https://github.com/torvalds/linux/blob/fa4b851b4ad632dc673627f38a8a552547568a2c/drivers/hid/hid-playstation.c#L997
+ * speed_2x = (gyro_speed_plus + gyro_speed_minus);
+ * sens_numer = speed_2x * PS5_GYRO_RES_PER_DEG_S
+ */
+static constexpr int gyro_calib_sens_numer = (ps5_calibration_info[19] + ps5_calibration_info[21]) *
+                                             PS5_GYRO_RES_PER_DEG_S;
+
+/**
+ * see:
+ * https://github.com/torvalds/linux/blob/fa4b851b4ad632dc673627f38a8a552547568a2c/drivers/hid/hid-playstation.c#L998-L999
+ * sens_denom = abs(gyro_pitch_plus - gyro_pitch_bias) + abs(gyro_pitch_minus - gyro_pitch_bias);
+ */
+static constexpr int gyro_calib_pitch_denom = ps5_calibration_info[7] - ps5_calibration_info[1] +
+                                              ps5_calibration_info[9] - ps5_calibration_info[1];
+
+/**
+ * see:
+ * https://github.com/torvalds/linux/blob/fa4b851b4ad632dc673627f38a8a552547568a2c/drivers/hid/hid-playstation.c#L1004-L1005
+ * sens_denom = abs(gyro_yaw_plus - gyro_yaw_bias) + abs(gyro_yaw_minus - gyro_yaw_bias);
+ */
+static constexpr int gyro_calib_yaw_denom = ps5_calibration_info[11] - ps5_calibration_info[3] +
+                                            ps5_calibration_info[13] - ps5_calibration_info[3];
+
+/**
+ * see:
+ * https://github.com/torvalds/linux/blob/fa4b851b4ad632dc673627f38a8a552547568a2c/drivers/hid/hid-playstation.c#L1010-L1011
+ * sens_denom = abs(gyro_roll_plus - gyro_roll_bias) + abs(gyro_roll_minus - gyro_roll_bias);
+ */
+static constexpr int gyro_calib_roll_denom = ps5_calibration_info[15] - ps5_calibration_info[5] +
+                                             ps5_calibration_info[17] - ps5_calibration_info[5];
+
+/**
+ * see:
+ * https://github.com/torvalds/linux/blob/fa4b851b4ad632dc673627f38a8a552547568a2c/drivers/hid/hid-playstation.c#L1036
+ * range_2g = acc_x_plus - acc_x_minus;
+ * sens_denom = range_2g;
+ */
+static constexpr int acc_calib_denom = ps5_calibration_info[23] - ps5_calibration_info[25];
+
+/**
+ * see:
+ * https://github.com/torvalds/linux/blob/fa4b851b4ad632dc673627f38a8a552547568a2c/drivers/hid/hid-playstation.c#L1034
+ * range_2g = acc_x_plus - acc_x_minus;
+ * bias = acc_x_plus - range_2g / 2
+ */
+static constexpr int acc_calib_x_bias = ps5_calibration_info[23] - acc_calib_denom / 2;
+
+/**
+ * see:
+ * https://github.com/torvalds/linux/blob/fa4b851b4ad632dc673627f38a8a552547568a2c/drivers/hid/hid-playstation.c#L1035
+ * sens_numer = 2*DS_ACC_RES_PER_G;
+ */
+static constexpr int acc_calib_sens_numer = 2 * PS5_ACC_RES_PER_G;
+
+/**
+ * see:
+ * https://github.com/torvalds/linux/blob/fa4b851b4ad632dc673627f38a8a552547568a2c/drivers/hid/hid-playstation.c#L1040
+ * bias = acc_y_plus - range_2g / 2;
+ */
+static constexpr int acc_calib_y_bias = ps5_calibration_info[27] - acc_calib_denom / 2;
+
+/**
+ * see:
+ * https://github.com/torvalds/linux/blob/fa4b851b4ad632dc673627f38a8a552547568a2c/drivers/hid/hid-playstation.c#L1046
+ * bias = acc_z_plus - range_2g / 2;
+ */
+static constexpr int acc_calib_z_bias = ps5_calibration_info[31] - acc_calib_denom / 2;
 
 static constexpr unsigned char ps5_firmware_info[] = {
     0x20, 0x4A, 0x75, 0x6E, 0x20, 0x31, 0x39, 0x20, 0x32, 0x30, 0x32, 0x33, 0x31, 0x34, 0x3A, 0x34,
@@ -190,7 +305,7 @@ struct dualsense_touch_point {
  * https://github.com/torvalds/linux/blob/005f6f34bd47eaa61d939a2727fc648e687b84c1/drivers/hid/hid-playstation.c#L90-L106
  */
 enum DS_BUTTONS0 : uint8_t {
-  HAT_SWITCH = 0x0F,
+  HAT_SWITCH = 0x07, // First 3 bits are HAT
   SQUARE = 0x10,
   CROSS = 0x20,
   CIRCLE = 0x40,
@@ -229,8 +344,8 @@ enum HAT_STATES : uint8_t {
 struct dualsense_input_report_usb {
   uint8_t report_id = 0x01;
   uint8_t x, y = PS5_AXIS_NEUTRAL;   // LS
-  uint8_t rx, ry = PS5_AXIS_NEUTRAL; // L2, R2
-  uint8_t z, rz = PS5_AXIS_NEUTRAL;  // RS
+  uint8_t rx, ry = PS5_AXIS_NEUTRAL; // RS
+  uint8_t z, rz = PS5_AXIS_NEUTRAL;  // L2, R2
   uint8_t seq_number = 0;
   // HAT_SWITCH is neutral when 0x8 is reported
   uint8_t buttons[4] = {HAT_NEUTRAL, 0, 0, 0};
