@@ -145,6 +145,7 @@ std::vector<std::string> PS5Joypad::get_nodes() const {
   // TODO
   return std::vector<std::string>();
 }
+
 void PS5Joypad::set_pressed_buttons(int pressed) {
   { // First reset everything to non-pressed
     this->_state->current_state.buttons[0] = 0;
@@ -270,17 +271,38 @@ void PS5Joypad::set_motion(PS5Joypad::MOTION_TYPE type, float x, float y, float 
   }
   }
 }
+
 void PS5Joypad::set_battery(PS5Joypad::BATTERY_STATE state, int percentage) {
   // TODO
 }
+
 void PS5Joypad::set_on_led(const std::function<void(int, int, int)> &callback) {
   this->_state->on_led = callback;
 }
-void PS5Joypad::place_finger(int finger_nr, float x, float y, float pressure, int orientation) {
-  // TODO
+
+void PS5Joypad::place_finger(int finger_nr, float x, float y) {
+  if (finger_nr <= 1) {
+    this->_state->current_state.points[finger_nr].contact = 0x0;
+
+    uint8_t *array;
+
+    array = reinterpret_cast<uint8_t *>(&x);
+    this->_state->current_state.points[finger_nr].x_lo = array[0];
+    this->_state->current_state.points[finger_nr].x_hi = array[3];
+
+    array = reinterpret_cast<uint8_t *>(&y);
+    this->_state->current_state.points[finger_nr].y_lo = array[0];
+    this->_state->current_state.points[finger_nr].y_hi = array[3];
+
+    send_report(*this->_state);
+  }
 }
+
 void PS5Joypad::release_finger(int finger_nr) {
-  // TODO
+  if (finger_nr <= 1) {
+    this->_state->current_state.points[finger_nr].contact = 0xFF;
+    send_report(*this->_state);
+  }
 }
 
 } // namespace inputtino

@@ -293,6 +293,11 @@ static constexpr unsigned char ps5_pairing_info[] = {
 };
 
 struct dualsense_touch_point {
+  /*
+   * Status of a DualShock4 touch point contact.
+   * Contact IDs, with highest bit set are 'inactive'
+   * and any associated data is then invalid.
+   */
   uint8_t contact;
   uint8_t x_lo;
   uint8_t x_hi : 4, y_lo : 4;

@@ -345,7 +345,7 @@ public:
   void set_stick(STICK_POSITION stick_type, short x, short y) override;
   void set_on_rumble(const std::function<void(int low_freq, int high_freq)> &callback);
 
-  void place_finger(int finger_nr, float x, float y, float pressure, int orientation);
+  void place_finger(int finger_nr, float x, float y);
   void release_finger(int finger_nr);
 
   enum MOTION_TYPE : uint8_t {

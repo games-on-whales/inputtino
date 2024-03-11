@@ -89,6 +89,8 @@ TEST_CASE_METHOD(SDLTestsFixture, "PS Joypad", "[SDL]") {
 
   std::this_thread::sleep_for(250ms);
 
+  // TODO: seems that I can't force it to use HIDAPI, it's picking up sysjoystick which is lacking features
+  SDL_SetHint(SDL_HINT_JOYSTICK_HIDAPI, "1");
   SDL_SetHint(SDL_HINT_JOYSTICK_HIDAPI_PS5, "1");
   SDL_SetHint(SDL_HINT_JOYSTICK_HIDAPI_PS5_RUMBLE, "1");
   SDL_SetHint(SDL_HINT_JOYSTICK_HIDAPI_PS5_PLAYER_LED, "1");
@@ -121,7 +123,8 @@ TEST_CASE_METHOD(SDLTestsFixture, "PS Joypad", "[SDL]") {
   }
 
   { // LED
-    // Unfortunately LINUX_JoystickSetLED is not implemented in SDL2
+    // Unfortunately LINUX_JoystickSetLED is not implemented in sysjoystick
+    // TODO: force hidapi driver
     //        REQUIRE(SDL_GameControllerHasLED(gc));
     //        struct LED {
     //          int r;
@@ -221,10 +224,21 @@ TEST_CASE_METHOD(SDLTestsFixture, "PS Joypad", "[SDL]") {
     REQUIRE_THAT(event.csensor.data[1], WithinAbs(gyro_data[1], 0.001f));
     REQUIRE_THAT(event.csensor.data[2], WithinAbs(gyro_data[2], 0.001f));
   }
-  // TODO: test touchpad
+
+  { // Test touchpad
+    // TODO: sysjoystick is lacking implementation, force hidapi
+    // REQUIRE(SDL_GameControllerGetNumTouchpads(gc) == 1);
+
+    joypad.place_finger(0, 1920, 1080);
+    joypad.place_finger(1, 1920, 1080);
+    joypad.release_finger(0);
+    joypad.release_finger(1);
+  }
   // TODO: test battery
+
   // Adaptive triggers aren't supported by SDL
   // see:https://github.com/libsdl-org/SDL/issues/5125#issuecomment-1204261666
+  // see: HIDAPI_DriverPS5_RumbleJoystickTriggers()
 
   SDL_GameControllerClose(gc);
 }
