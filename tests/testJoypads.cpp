@@ -84,8 +84,7 @@ void test_buttons(SDL_GameController *gc, Joypad &joypad) {
 
 TEST_CASE_METHOD(SDLTestsFixture, "PS Joypad", "[SDL]") {
   // Create the controller
-  auto joypad_ptr = *PS5Joypad::create();
-  auto joypad = *joypad_ptr;
+  auto joypad = std::move(*PS5Joypad::create());
 
   std::this_thread::sleep_for(250ms);
 
@@ -245,8 +244,7 @@ TEST_CASE_METHOD(SDLTestsFixture, "PS Joypad", "[SDL]") {
 
 TEST_CASE_METHOD(SDLTestsFixture, "XBOX Joypad", "[SDL]") {
   // Create the controller
-  auto joypad_ptr = *XboxOneJoypad::create();
-  auto joypad = *joypad_ptr;
+  auto joypad = std::move(*XboxOneJoypad::create());
 
   std::this_thread::sleep_for(150ms);
 
@@ -314,8 +312,7 @@ TEST_CASE_METHOD(SDLTestsFixture, "XBOX Joypad", "[SDL]") {
 
 TEST_CASE_METHOD(SDLTestsFixture, "Nintendo Joypad", "[SDL]") {
   // Create the controller
-  auto joypad_ptr = *SwitchJoypad::create();
-  auto joypad = *joypad_ptr;
+  auto joypad = std::move(*SwitchJoypad::create());
 
   std::this_thread::sleep_for(150ms);
 

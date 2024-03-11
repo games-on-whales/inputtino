@@ -1,21 +1,13 @@
 #include <cmath>
 #include <endian.h>
 #include <inputtino/input.hpp>
+#include <uhid/protected_types.hpp>
 #include <uhid/ps5.hpp>
 #include <uhid/uhid.hpp>
 
 namespace inputtino {
 
-struct PS5JoypadState {
-  std::shared_ptr<uhid::Device> dev;
-
-  uhid::dualsense_input_report_usb current_state;
-
-  std::optional<std::function<void(int, int)>> on_rumble = std::nullopt;
-  std::optional<std::function<void(int, int, int)>> on_led = std::nullopt;
-};
-
-static void send_report(PS5JoypadState &state, int fd) {
+static void send_report(PS5JoypadState &state) {
   { // setup timestamp and increase seq_number
     state.current_state.seq_number++;
     if (state.current_state.seq_number >= 255) {
@@ -37,14 +29,8 @@ static void send_report(PS5JoypadState &state, int fd) {
     std::copy(data, data + sizeof(state.current_state), &ev.u.input2.data[0]);
     ev.u.input2.size = sizeof(state.current_state);
   }
-  uhid::uhid_write(fd, &ev);
+  state.dev->send(ev);
 }
-
-static void send_report(PS5JoypadState &state) {
-  send_report(state, state.dev->state->fd);
-}
-
-PS5Joypad::PS5Joypad() : _state(std::make_shared<PS5JoypadState>()) {}
 
 static void on_uhid_event(std::shared_ptr<PS5JoypadState> state, uhid_event ev, int fd) {
   switch (ev.type) {
@@ -109,16 +95,21 @@ static void on_uhid_event(std::shared_ptr<PS5JoypadState> state, uhid_event ev, 
       }
     }
   }
-  case UHID_INPUT2:
-  case UHID_START:
-    send_report(*state, fd);
-    break;
   default:
     break;
   }
 }
 
-Result<std::shared_ptr<PS5Joypad>> PS5Joypad::create() {
+PS5Joypad::PS5Joypad() : _state(std::make_shared<PS5JoypadState>()) {}
+
+PS5Joypad::~PS5Joypad() {
+  if (this->_state && this->_state->dev) {
+    this->_state->dev->stop_thread();
+    this->_state->dev.reset(); // Will trigger ~Device and ultimately destroy the device
+  }
+}
+
+Result<PS5Joypad> PS5Joypad::create() {
   auto def = uhid::DeviceDefinition{
       .name = "Wolf PS5 Joypad",
       .phys = "00:11:22:33:44:55",
@@ -130,10 +121,14 @@ Result<std::shared_ptr<PS5Joypad>> PS5Joypad::create() {
       .country = 0,
       .report_description = {&uhid::ps5_rdesc[0], &uhid::ps5_rdesc[0] + sizeof(uhid::ps5_rdesc)}};
 
-  auto joypad = std::shared_ptr<PS5Joypad>(new PS5Joypad());
-  auto dev = uhid::create(def, [state = joypad->_state](uhid_event ev, int fd) { on_uhid_event(state, ev, fd); });
-  joypad->_state->dev = std::move(*dev);
-  return joypad;
+  auto joypad = PS5Joypad();
+  auto dev =
+      uhid::Device::create(def, [state = joypad._state](uhid_event ev, int fd) { on_uhid_event(state, ev, fd); });
+  if (dev) {
+    joypad._state->dev = std::make_shared<uhid::Device>(std::move(*dev));
+    return joypad;
+  }
+  return Error(dev.getErrorMessage());
 }
 
 static int scale_value(int input, int input_start, int input_end, int output_start, int output_end) {

@@ -85,24 +85,27 @@ Result<libevdev_uinput_ptr> create_nintendo_controller() {
 
 SwitchJoypad::SwitchJoypad() : _state(std::make_shared<SwitchJoypadState>()) {}
 
-Result<std::shared_ptr<SwitchJoypad>> SwitchJoypad::create() {
+SwitchJoypad::~SwitchJoypad() {
+  if (_state) {
+    _state->stop_listening_events = true;
+    if (_state->joy.get() != nullptr && _state->events_thread.joinable()) {
+      _state->events_thread.join();
+    }
+  }
+}
+
+Result<SwitchJoypad> SwitchJoypad::create() {
   auto joy_el = create_nintendo_controller();
   if (!joy_el) {
     return Error(joy_el.getErrorMessage());
   }
 
-  auto joypad = std::shared_ptr<SwitchJoypad>(new SwitchJoypad(), [](SwitchJoypad *joy) {
-    joy->_state->stop_listening_events = true;
-    if (joy->_state->joy.get() != nullptr && joy->_state->events_thread.joinable()) {
-      joy->_state->events_thread.join();
-    }
-    delete joy;
-  });
-  joypad->_state->joy = std::move(*joy_el);
+  SwitchJoypad joypad;
+  joypad._state->joy = std::move(*joy_el);
 
-  auto event_thread = std::thread(event_listener, joypad->_state);
-  joypad->_state->events_thread = std::move(event_thread);
-  joypad->_state->events_thread.detach();
+  auto event_thread = std::thread(event_listener, joypad._state);
+  joypad._state->events_thread = std::move(event_thread);
+  joypad._state->events_thread.detach();
 
   return joypad;
 }
@@ -160,21 +163,21 @@ void SwitchJoypad::set_pressed_buttons(int newly_pressed) {
   this->_state->currently_pressed_btns = bf_new;
 }
 
- void SwitchJoypad::set_stick(Joypad::STICK_POSITION stick_type, short x, short y) {
-   if (auto controller = this->_state->joy.get()) {
-     if (stick_type == LS) {
-       libevdev_uinput_write_event(controller, EV_ABS, ABS_X, x);
-       libevdev_uinput_write_event(controller, EV_ABS, ABS_Y, -y);
-     } else {
-       libevdev_uinput_write_event(controller, EV_ABS, ABS_RX, x);
-       libevdev_uinput_write_event(controller, EV_ABS, ABS_RY, -y);
-     }
+void SwitchJoypad::set_stick(Joypad::STICK_POSITION stick_type, short x, short y) {
+  if (auto controller = this->_state->joy.get()) {
+    if (stick_type == LS) {
+      libevdev_uinput_write_event(controller, EV_ABS, ABS_X, x);
+      libevdev_uinput_write_event(controller, EV_ABS, ABS_Y, -y);
+    } else {
+      libevdev_uinput_write_event(controller, EV_ABS, ABS_RX, x);
+      libevdev_uinput_write_event(controller, EV_ABS, ABS_RY, -y);
+    }
 
-     libevdev_uinput_write_event(controller, EV_SYN, SYN_REPORT, 0);
-   }
+    libevdev_uinput_write_event(controller, EV_SYN, SYN_REPORT, 0);
+  }
 }
 
- void SwitchJoypad::set_triggers(int16_t left, int16_t right) {
+void SwitchJoypad::set_triggers(int16_t left, int16_t right) {
   if (auto controller = this->_state->joy.get()) {
     // Nintendo ZL and ZR are just buttons (EV_KEY)
     libevdev_uinput_write_event(controller, EV_KEY, BTN_TL2, left > 0 ? 1 : 0);
@@ -185,7 +188,7 @@ void SwitchJoypad::set_pressed_buttons(int newly_pressed) {
   }
 }
 
- void SwitchJoypad::set_on_rumble(const std::function<void(int, int)> &callback) {
+void SwitchJoypad::set_on_rumble(const std::function<void(int, int)> &callback) {
   this->_state->on_rumble = callback;
 }
 } // namespace inputtino

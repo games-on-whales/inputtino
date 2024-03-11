@@ -78,12 +78,18 @@ Result<libevdev_uinput_ptr> create_tablet() {
 
 PenTablet::PenTablet() : _state(std::make_shared<PenTabletState>()) {}
 
-Result<std::shared_ptr<PenTablet>> PenTablet::create() {
+PenTablet::~PenTablet() {
+  if (_state) {
+    _state.reset();
+  }
+}
+
+Result<PenTablet> PenTablet::create() {
   auto tablet = create_tablet();
   if (tablet) {
-    auto pt = std::shared_ptr<PenTablet>(new PenTablet(), [](PenTablet *pt) { delete pt; });
-    pt->_state->pen_tablet = std::move(*tablet);
-    return pt;
+    PenTablet pt;
+    pt._state->pen_tablet = std::move(*tablet);
+    return std::move(pt);
   } else {
     return Error(tablet.getErrorMessage());
   }

@@ -24,11 +24,6 @@ struct ThreadState {
   bool stop_repeat_thread = false;
 };
 
-struct Device {
-  std::thread ev_thread;
-  std::shared_ptr<ThreadState> state;
-};
-
 struct DeviceDefinition {
   std::string name;
   std::string phys;
@@ -52,27 +47,61 @@ static inputtino::Result<bool> uhid_write(int fd, const struct uhid_event *ev) {
   }
 }
 
-static void destroy(Device *dev) {
-  struct uhid_event ev {};
-  ev.type = UHID_DESTROY;
-  uhid_write(dev->state->fd, &ev);
+class Device {
+private:
+  Device(std::shared_ptr<std::thread> ev_thread, std::shared_ptr<ThreadState> state)
+      : ev_thread(std::move(ev_thread)), state(std::move(state)){};
+  std::shared_ptr<std::thread> ev_thread;
+  std::shared_ptr<ThreadState> state;
+  std::shared_ptr<std::function<void(const uhid_event &ev, int fd)>> on_event;
 
-  close(dev->state->fd); // This should also close the thread by causing a POLLHUP
+public:
+  static inputtino::Result<Device> create(const DeviceDefinition &definition,
+                                          const std::function<void(const uhid_event &ev, int fd)> &on_event);
 
-  dev->state->stop_repeat_thread = true;
-  if (dev->ev_thread.joinable()) {
-    dev->ev_thread.join(); // let's wait for the thread to finish
+  Device(Device &&j) noexcept : ev_thread(nullptr), state(nullptr), on_event(nullptr) {
+    std::swap(j.ev_thread, ev_thread);
+    std::swap(j.state, state);
+    std::swap(j.on_event, on_event);
   }
-  delete dev;
-}
+
+  Device(Device const &) = delete;
+  Device &operator=(Device const &) = delete;
+
+  inline inputtino::Result<bool> send(const uhid_event &ev) {
+    return uhid_write(state->fd, &ev);
+  }
+
+  inline void stop_thread() {
+    state->stop_repeat_thread = true;
+    if (ev_thread->joinable()) {
+      ev_thread->join(); // let's wait for the thread to finish
+    }
+  }
+
+  ~Device() {
+    if (state) {
+      struct uhid_event ev {};
+      ev.type = UHID_DESTROY;
+      uhid_write(state->fd, &ev);
+
+      close(state->fd); // This should also close the thread by causing a POLLHUP
+
+      state->stop_repeat_thread = true;
+      if (ev_thread->joinable()) {
+        ev_thread->join(); // let's wait for the thread to finish
+      }
+    }
+  }
+};
 
 static void set_c_str(const std::string &str, unsigned char *c_str) {
   std::copy(str.begin(), str.end(), c_str);
   c_str[str.length()] = 0;
 }
 
-static inputtino::Result<std::shared_ptr<Device>>
-create(const DeviceDefinition &definition, const std::function<void(const uhid_event &ev, int fd)> &on_event) {
+inputtino::Result<Device> Device::create(const DeviceDefinition &definition,
+                                         const std::function<void(const uhid_event &ev, int fd)> &on_event) {
 
   int fd = open("/dev/uhid", O_RDWR | O_CLOEXEC);
   if (fd < 0) {
@@ -92,10 +121,9 @@ create(const DeviceDefinition &definition, const std::function<void(const uhid_e
   auto res = uhid_write(fd, &ev);
   if (res) {
     auto state = std::make_shared<ThreadState>();
-    state->on_event = on_event;
     state->fd = fd;
-    auto device = std::shared_ptr<Device>(new Device{.state = state}, destroy);
-    auto thread = std::thread([state]() {
+    state->on_event = on_event;
+    auto thread = std::make_shared<std::thread>([state]() {
       ssize_t ret;
       struct pollfd pfds[1];
       pfds[0].fd = state->fd;
@@ -121,14 +149,15 @@ create(const DeviceDefinition &definition, const std::function<void(const uhid_e
           } else if (ret != sizeof(ev)) {
             fprintf(stderr, "Invalid size read from uhid-dev: %zd != %zu\n", ret, sizeof(ev));
           } else {
-            state->on_event(ev, state->fd);
+            if (state->on_event) {
+              state->on_event(ev, state->fd);
+            }
           }
         }
       }
     });
-    thread.detach();
-    device->ev_thread = std::move(thread);
-    return device;
+    thread->detach();
+    return inputtino::Result<Device>({std::move(thread), std::move(state)});
   } else {
     close(fd);
     return inputtino::Error(res.getErrorMessage());

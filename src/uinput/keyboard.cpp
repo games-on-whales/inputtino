@@ -62,18 +62,21 @@ static std::optional<keyboard::KEY_MAP> press_btn(libevdev_uinput *kb, short key
 
 Keyboard::Keyboard() : _state(std::make_shared<KeyboardState>()) {}
 
-Result<std::shared_ptr<Keyboard>> Keyboard::create(std::chrono::milliseconds timeout_repress_key) {
+Keyboard::~Keyboard() {
+  if (_state) {
+    _state->stop_repeat_thread = true;
+    if (_state->repeat_press_t.joinable()) {
+      _state->repeat_press_t.join();
+    }
+  }
+}
+
+Result<Keyboard> Keyboard::create(std::chrono::milliseconds timeout_repress_key) {
   auto kb_el = create_keyboard();
   if (kb_el) {
-    auto kb = std::shared_ptr<Keyboard>(new Keyboard(), [](Keyboard *kb) {
-      kb->_state->stop_repeat_thread = true;
-      if (kb->_state->repeat_press_t.joinable()) {
-        kb->_state->repeat_press_t.join();
-      }
-      delete kb;
-    });
-    kb->_state->kb = std::move(*kb_el);
-    auto repeat_thread = std::thread([state = kb->_state, timeout_repress_key]() {
+    Keyboard kb;
+    kb._state->kb = std::move(*kb_el);
+    auto repeat_thread = std::thread([state = kb._state, timeout_repress_key]() {
       while (!state->stop_repeat_thread) {
         std::this_thread::sleep_for(timeout_repress_key);
         for (auto key : state->cur_press_keys) {
@@ -83,8 +86,8 @@ Result<std::shared_ptr<Keyboard>> Keyboard::create(std::chrono::milliseconds tim
         }
       }
     });
-    kb->_state->repeat_press_t = std::move(repeat_thread);
-    kb->_state->repeat_press_t.detach();
+    kb._state->repeat_press_t = std::move(repeat_thread);
+    kb._state->repeat_press_t.detach();
     return kb;
   } else {
     return Error(kb_el.getErrorMessage());

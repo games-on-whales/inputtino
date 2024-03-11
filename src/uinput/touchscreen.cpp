@@ -1,7 +1,7 @@
-#include <inputtino/protected_types.hpp>
+#include "inputtino/input.hpp"
 #include <cmath>
 #include <cstring>
-#include "inputtino/input.hpp"
+#include <inputtino/protected_types.hpp>
 
 namespace inputtino {
 
@@ -72,16 +72,21 @@ Result<libevdev_uinput_ptr> create_touch_screen() {
   return libevdev_uinput_ptr{uidev, ::libevdev_uinput_destroy};
 }
 
-
 TouchScreen::TouchScreen() : _state(std::make_shared<TouchScreenState>()) {}
 
-Result<std::shared_ptr<TouchScreen>> TouchScreen::create() {
+TouchScreen::~TouchScreen() {
+  if (_state) {
+    _state.reset();
+  }
+}
+
+Result<TouchScreen> TouchScreen::create() {
   auto touch_screen = create_touch_screen();
   if (touch_screen) {
-    auto ts = std::shared_ptr<TouchScreen>(new TouchScreen());
-    ts->_state->touch_screen = std::move(*touch_screen);
+    TouchScreen ts;
+    ts._state->touch_screen = std::move(*touch_screen);
     return ts;
-  } else{
+  } else {
     return Error(touch_screen.getErrorMessage());
   }
 }

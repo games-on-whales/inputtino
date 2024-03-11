@@ -79,14 +79,19 @@ Result<libevdev_uinput_ptr> create_trackpad() {
   return libevdev_uinput_ptr{uidev, ::libevdev_uinput_destroy};
 }
 
-Trackpad::Trackpad() : _state(std::make_unique<TrackpadState>()) {}
+Trackpad::Trackpad() : _state(std::make_shared<TrackpadState>()) {}
+Trackpad::~Trackpad() {
+  if (_state) {
+    _state.reset();
+  }
+}
 
-Result<std::shared_ptr<Trackpad>> Trackpad::create() {
+Result<Trackpad> Trackpad::create() {
   auto trackpad_el = create_trackpad();
   if (trackpad_el) {
-    auto trackpad = std::shared_ptr<Trackpad>(new Trackpad(), [](Trackpad *ptr) { delete ptr; });
-    trackpad->_state->trackpad = std::move(*trackpad_el);
-    return trackpad;
+    Trackpad trackpad;
+    trackpad._state->trackpad = std::move(*trackpad_el);
+    return std::move(trackpad);
   } else {
     return Error(trackpad_el.getErrorMessage());
   }

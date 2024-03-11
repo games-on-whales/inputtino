@@ -25,10 +25,12 @@ public:
  */
 class Mouse : public VirtualDevice {
 public:
-  static Result<std::shared_ptr<Mouse>> create();
+  static Result<Mouse> create();
 
-  Mouse(const Mouse &j) : _state(j._state) {}
-  Mouse(Mouse &&j) noexcept : _state(std::move(j._state)) {}
+  Mouse(Mouse &&j) noexcept : _state(nullptr) {
+    std::swap(j._state, _state);
+  }
+  ~Mouse() override;
   std::vector<std::string> get_nodes() const override;
 
   void move(int delta_x, int delta_y);
@@ -99,9 +101,11 @@ private:
  */
 class Trackpad : public VirtualDevice {
 public:
-  static Result<std::shared_ptr<Trackpad>> create();
-  Trackpad(const Trackpad &j) : _state(j._state) {}
-  Trackpad(Trackpad &&j) noexcept : _state(std::move(j._state)) {}
+  static Result<Trackpad> create();
+  Trackpad(Trackpad &&j) noexcept : _state(nullptr) {
+    std::swap(j._state, _state);
+  }
+  ~Trackpad() override;
   std::vector<std::string> get_nodes() const override;
 
   /**
@@ -132,9 +136,11 @@ private:
 class TouchScreen : public VirtualDevice {
 
 public:
-  static Result<std::shared_ptr<TouchScreen>> create();
-  TouchScreen(const TouchScreen &j) : _state(j._state) {}
-  TouchScreen(TouchScreen &&j) noexcept : _state(std::move(j._state)) {}
+  static Result<TouchScreen> create();
+  TouchScreen(TouchScreen &&j) noexcept : _state(nullptr) {
+    std::swap(j._state, _state);
+  }
+  ~TouchScreen() override;
   std::vector<std::string> get_nodes() const override;
 
   /**
@@ -164,10 +170,11 @@ private:
  */
 class PenTablet : public VirtualDevice {
 public:
-  static Result<std::shared_ptr<PenTablet>> create();
-  PenTablet(const PenTablet &j) : _state(j._state) {}
-  PenTablet(PenTablet &&j) : _state(std::move(j._state)) {}
-
+  static Result<PenTablet> create();
+  PenTablet(PenTablet &&j) : _state(nullptr) {
+    std::swap(j._state, _state);
+  }
+  ~PenTablet() override;
   std::vector<std::string> get_nodes() const override;
 
   enum TOOL_TYPE {
@@ -217,10 +224,11 @@ private:
  */
 class Keyboard : public VirtualDevice {
 public:
-  static Result<std::shared_ptr<Keyboard>> create(std::chrono::milliseconds timeout_repress_key = 50ms);
-  Keyboard(const Keyboard &j) : _state(j._state) {}
-  Keyboard(Keyboard &&j) noexcept : _state(std::move(j._state)) {}
-
+  static Result<Keyboard> create(std::chrono::milliseconds timeout_repress_key = 50ms);
+  Keyboard(Keyboard &&j) noexcept : _state(nullptr) {
+    std::swap(j._state, _state);
+  }
+  ~Keyboard() override;
   std::vector<std::string> get_nodes() const override;
 
   void press(short key_code);
@@ -292,9 +300,11 @@ public:
 
 class XboxOneJoypad : public Joypad {
 public:
-  static Result<std::shared_ptr<XboxOneJoypad>> create();
-  XboxOneJoypad(const XboxOneJoypad &j) : _state(j._state) {}
-  XboxOneJoypad(XboxOneJoypad &&j) noexcept : _state(std::move(j._state)) {}
+  static Result<XboxOneJoypad> create();
+  XboxOneJoypad(XboxOneJoypad &&j) noexcept : _state(nullptr) {
+    std::swap(j._state, _state);
+  }
+  ~XboxOneJoypad() override;
 
   std::vector<std::string> get_nodes() const override;
 
@@ -313,9 +323,11 @@ private:
 
 class SwitchJoypad : public Joypad {
 public:
-  static Result<std::shared_ptr<SwitchJoypad>> create();
-  SwitchJoypad(const SwitchJoypad &j) : _state(j._state) {}
-  SwitchJoypad(SwitchJoypad &&j) : _state(std::move(j._state)) {}
+  static Result<SwitchJoypad> create();
+  SwitchJoypad(SwitchJoypad &&j) : _state(nullptr) {
+    std::swap(j._state, _state);
+  }
+  ~SwitchJoypad() override;
 
   std::vector<std::string> get_nodes() const override;
 
@@ -334,9 +346,11 @@ private:
 
 class PS5Joypad : public Joypad {
 public:
-  static Result<std::shared_ptr<PS5Joypad>> create();
-  PS5Joypad(const PS5Joypad &j) : _state(j._state) {}
-  PS5Joypad(PS5Joypad &&j)  noexcept : _state(std::move(j._state)) {}
+  static Result<PS5Joypad> create();
+  PS5Joypad(PS5Joypad &&j) noexcept : _state(nullptr) {
+    std::swap(j._state, _state);
+  }
+  ~PS5Joypad() override;
 
   std::vector<std::string> get_nodes() const override;
 

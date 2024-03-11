@@ -96,26 +96,32 @@ static Result<libevdev_uinput_ptr> create_mouse_abs() {
   return libevdev_uinput_ptr{uidev, ::libevdev_uinput_destroy};
 }
 
-Mouse::Mouse() : _state(std::make_unique<MouseState>()) {}
+Mouse::Mouse() : _state(std::make_shared<MouseState>()) {}
 
-Result<std::shared_ptr<Mouse>> Mouse::create() {
-  auto mouse = std::shared_ptr<Mouse>(new Mouse, [](Mouse *mouse) { delete mouse; });
+Mouse::~Mouse() {
+  if (_state) {
+    _state.reset();
+  }
+}
+
+Result<Mouse> Mouse::create() {
+  auto mouse = Mouse();
 
   auto mouse_rel_or_error = create_mouse();
   if (mouse_rel_or_error) {
-    mouse->_state->mouse_rel = std::move(*mouse_rel_or_error);
+    mouse._state->mouse_rel = std::move(*mouse_rel_or_error);
   } else {
     return Error(mouse_rel_or_error.getErrorMessage());
   }
 
   auto mouse_abs_or_error = create_mouse_abs();
   if (mouse_abs_or_error) {
-    mouse->_state->mouse_abs = std::move(*mouse_abs_or_error);
+    mouse._state->mouse_abs = std::move(*mouse_abs_or_error);
   } else {
     return Error(mouse_abs_or_error.getErrorMessage());
   }
 
-  return {std::move(mouse)};
+  return std::move(mouse);
 }
 
 void Mouse::move(int delta_x, int delta_y) {

@@ -15,8 +15,7 @@ using Catch::Matchers::WithinRel;
  */
 
 TEST_CASE("virtual keyboard", "[LIBINPUT]") {
-    auto kb_ptr = *Keyboard::create();
-    auto kb = *kb_ptr;
+    auto kb = std::move(*Keyboard::create());
     auto li = create_libinput_context(kb.get_nodes());
     auto event = get_event(li);
     REQUIRE(libinput_event_get_type(event.get()) == LIBINPUT_EVENT_DEVICE_ADDED);
@@ -45,8 +44,7 @@ TEST_CASE("virtual keyboard", "[LIBINPUT]") {
 }
 
 TEST_CASE("virtual mouse relative", "[LIBINPUT]") {
-    auto mouse_ptr = *Mouse::create();
-    auto mouse = *mouse_ptr;
+    auto mouse = std::move(*Mouse::create());
     auto li = create_libinput_context({mouse.get_nodes()[0]});
     auto event = get_event(li);
     REQUIRE(libinput_event_get_type(event.get()) == LIBINPUT_EVENT_DEVICE_ADDED);
@@ -127,8 +125,7 @@ TEST_CASE("virtual mouse relative", "[LIBINPUT]") {
 }
 
 TEST_CASE("virtual mouse absolue", "[LIBINPUT]") {
-    auto mouse_ptr = *Mouse::create();
-    auto mouse = *mouse_ptr;
+    auto mouse = std::move(*Mouse::create());
     auto li = create_libinput_context({mouse.get_nodes()[1]});
     auto event = get_event(li);
     REQUIRE(libinput_event_get_type(event.get()) == LIBINPUT_EVENT_DEVICE_ADDED);
@@ -158,8 +155,7 @@ TEST_CASE("virtual mouse absolue", "[LIBINPUT]") {
 }
 
 TEST_CASE("virtual touch screen", "[LIBINPUT]") {
-    auto touch_ptr = *TouchScreen::create();
-    auto touch = *touch_ptr;
+    auto touch = std::move(*TouchScreen::create());
     auto li = create_libinput_context(touch.get_nodes());
     auto event = get_event(li);
     REQUIRE(libinput_event_get_type(event.get()) == LIBINPUT_EVENT_DEVICE_ADDED);
@@ -217,8 +213,7 @@ TEST_CASE("virtual touch screen", "[LIBINPUT]") {
 }
 
 TEST_CASE("virtual trackpad", "[LIBINPUT]") {
-    auto trackpad_ptr = *Trackpad::create();
-    auto trackpad = *trackpad_ptr;
+    auto trackpad = std::move(*Trackpad::create());
     auto li = create_libinput_context(trackpad.get_nodes());
     auto event = get_event(li);
     REQUIRE(libinput_event_get_type(event.get()) == LIBINPUT_EVENT_DEVICE_ADDED);
@@ -260,8 +255,7 @@ TEST_CASE("virtual trackpad", "[LIBINPUT]") {
 }
 
 TEST_CASE("virtual pen tablet", "[LIBINPUT]") {
-    auto tablet_ptr = *PenTablet::create();
-    auto tablet = *tablet_ptr;
+    auto tablet = std::move(*PenTablet::create());
     auto li = create_libinput_context(tablet.get_nodes());
     auto event = get_event(li);
     REQUIRE(libinput_event_get_type(event.get()) == LIBINPUT_EVENT_DEVICE_ADDED);

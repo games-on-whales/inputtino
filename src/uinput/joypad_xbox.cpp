@@ -80,24 +80,27 @@ Result<libevdev_uinput_ptr> create_xbox_controller() {
 
 XboxOneJoypad::XboxOneJoypad() : _state(std::make_shared<XboxOneJoypadState>()) {}
 
-Result<std::shared_ptr<XboxOneJoypad>> XboxOneJoypad::create() {
+XboxOneJoypad::~XboxOneJoypad() {
+  if (_state) {
+    _state->stop_listening_events = true;
+    if (_state->joy.get() != nullptr && _state->events_thread.joinable()) {
+      _state->events_thread.join();
+    }
+  }
+}
+
+Result<XboxOneJoypad> XboxOneJoypad::create() {
   auto joy_el = create_xbox_controller();
   if (!joy_el) {
     return Error(joy_el.getErrorMessage());
   }
 
-  auto joypad = std::shared_ptr<XboxOneJoypad>(new XboxOneJoypad(), [](XboxOneJoypad *joy) {
-    joy->_state->stop_listening_events = true;
-    if (joy->_state->joy.get() != nullptr && joy->_state->events_thread.joinable()) {
-      joy->_state->events_thread.join();
-    }
-    delete joy;
-  });
-  joypad->_state->joy = std::move(*joy_el);
+  XboxOneJoypad joypad;
+  joypad._state->joy = std::move(*joy_el);
 
-  auto event_thread = std::thread(event_listener, joypad->_state);
-  joypad->_state->events_thread = std::move(event_thread);
-  joypad->_state->events_thread.detach();
+  auto event_thread = std::thread(event_listener, joypad._state);
+  joypad._state->events_thread = std::move(event_thread);
+  joypad._state->events_thread.detach();
   return joypad;
 }
 
