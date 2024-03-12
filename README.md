@@ -11,11 +11,11 @@ Supports:
 - Joypad
     - Correctly emulates Xbox, PS5 or Nintendo joypads
     - Supports callbacks on Rumble events
-    - [WIP] Gyro and Acceleration support
+    - Gyro, Acceleration and Touchpad support (using UHID, [see rationale here](src/uhid/README.adoc))
 
 ## Use the REST API
 
-**WIP**: A simple JSON REST API to consume this library 
+**WIP**: A simple JSON REST API to consume this library
 
 ```bash
 docker run --init --name inputtino -p 8080:8080 -v /dev/input:/dev/input:rw --device /dev/uinput ghcr.io/games-on-whales/inputtino:stable
@@ -55,4 +55,4 @@ For more examples you can look at the unit tests under `tests/`: Joypads have be
 devices have been tested with `libinput`.
 
 The main interface is easily accessible
-under [include/inputtino/input.hpp](https://github.com/games-on-whales/inputtino/blob/main/include/inputtino/input.hpp)
+under [include/inputtino/input.hpp](include/inputtino/input.hpp)
