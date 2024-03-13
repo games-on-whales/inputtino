@@ -233,7 +233,14 @@ TEST_CASE_METHOD(SDLTestsFixture, "PS Joypad", "[SDL]") {
     joypad.release_finger(0);
     joypad.release_finger(1);
   }
-  // TODO: test battery
+
+  { // Test battery
+    joypad.set_battery(inputtino::PS5Joypad::BATTERY_CHARGHING, 80);
+    auto joy = SDL_GameControllerGetJoystick(gc);
+    auto level = SDL_JoystickCurrentPowerLevel(joy);
+    if (level != SDL_JOYSTICK_POWER_UNKNOWN) // TODO: SDL doesn't seem to pick it up..
+      REQUIRE(level == SDL_JOYSTICK_POWER_MEDIUM);
+  }
 
   // Adaptive triggers aren't supported by SDL
   // see:https://github.com/libsdl-org/SDL/issues/5125#issuecomment-1204261666

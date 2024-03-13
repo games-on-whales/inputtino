@@ -268,7 +268,13 @@ void PS5Joypad::set_motion(PS5Joypad::MOTION_TYPE type, float x, float y, float 
 }
 
 void PS5Joypad::set_battery(PS5Joypad::BATTERY_STATE state, int percentage) {
-  // TODO
+  /*
+   * Each unit of battery data corresponds to 10%
+   * 0 = 0-9%, 1 = 10-19%, .. and 10 = 100%
+   */
+  this->_state->current_state.battery_charge = std::lround((percentage / 10));
+  this->_state->current_state.battery_status = state;
+  send_report(*this->_state);
 }
 
 void PS5Joypad::set_on_led(const std::function<void(int, int, int)> &callback) {

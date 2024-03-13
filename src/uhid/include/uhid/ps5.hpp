@@ -369,9 +369,11 @@ struct dualsense_input_report_usb {
   uint8_t r2_adaptive_trigger = 0;
   uint8_t l2_adaptive_trigger = 0;
   uint8_t reserved4[9] = {};
-  /* Battery status */
-  uint8_t status = 0;
-  uint8_t reserved5[10] = {};
+
+  uint8_t battery_charge : 4;
+  uint8_t battery_status : 4;
+  uint8_t battery2 = 0x0c;
+  uint8_t reserved6[9] = {};
 };
 
 enum FLAG0 : uint8_t {

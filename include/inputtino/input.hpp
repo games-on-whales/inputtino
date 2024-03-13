@@ -377,12 +377,12 @@ public:
   void set_motion(MOTION_TYPE type, float x, float y, float z);
 
   enum BATTERY_STATE : uint8_t {
-    NOT_KNOWN = 0x00,
-    NOT_PRESENT = 0x01,
-    DISCHARGING = 0x02,
-    CHARGHING = 0x03,
-    NOT_CHARGING = 0x04,
-    FULL = 0x05
+    BATTERY_DISCHARGING = 0x0,
+    BATTERY_CHARGHING = 0x1,
+    BATTERY_FULL = 0x2,
+    VOLTAGE_OR_TEMPERATURE_OUT_OF_RANGE = 0xA,
+    TEMPERATURE_ERROR = 0xB,
+    CHARGHING_ERROR = 0xF
   };
 
   void set_battery(BATTERY_STATE state, int percentage);
