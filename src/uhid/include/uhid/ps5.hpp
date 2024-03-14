@@ -298,7 +298,8 @@ struct dualsense_touch_point {
    * Contact IDs, with highest bit set are 'inactive'
    * and any associated data is then invalid.
    */
-  uint8_t contact;
+  uint8_t id : 7;
+  uint8_t contact : 1;
   uint8_t x_lo;
   uint8_t x_hi : 4, y_lo : 4;
   uint8_t y_hi;

@@ -9,6 +9,7 @@ struct PS5JoypadState {
   std::shared_ptr<uhid::Device> dev;
 
   uhid::dualsense_input_report_usb current_state;
+  uint8_t touch_points_ids[2] = {0};
 
   std::optional<std::function<void(int, int)>> on_rumble = std::nullopt;
   std::optional<std::function<void(int, int, int)>> on_led = std::nullopt;

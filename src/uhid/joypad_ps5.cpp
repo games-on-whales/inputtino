@@ -281,19 +281,16 @@ void PS5Joypad::set_on_led(const std::function<void(int, int, int)> &callback) {
   this->_state->on_led = callback;
 }
 
-void PS5Joypad::place_finger(int finger_nr, float x, float y) {
+void PS5Joypad::place_finger(int finger_nr, uint16_t x, uint16_t y) {
   if (finger_nr <= 1) {
-    this->_state->current_state.points[finger_nr].contact = 0x0;
+    this->_state->current_state.points[finger_nr].contact = 0;
+    this->_state->current_state.points[finger_nr].id = this->_state->touch_points_ids[finger_nr] + 1;
 
-    uint8_t *array;
+    this->_state->current_state.points[finger_nr].x_lo = static_cast<uint8_t>(x & 0x00FF);
+    this->_state->current_state.points[finger_nr].x_hi = static_cast<uint8_t>((x & 0xFF00) >> 8);
 
-    array = reinterpret_cast<uint8_t *>(&x);
-    this->_state->current_state.points[finger_nr].x_lo = array[0];
-    this->_state->current_state.points[finger_nr].x_hi = array[3];
-
-    array = reinterpret_cast<uint8_t *>(&y);
-    this->_state->current_state.points[finger_nr].y_lo = array[0];
-    this->_state->current_state.points[finger_nr].y_hi = array[3];
+    this->_state->current_state.points[finger_nr].y_lo = static_cast<uint8_t>(y & 0x00FF);
+    this->_state->current_state.points[finger_nr].y_hi = static_cast<uint8_t>((y & 0xFF00) >> 4);
 
     send_report(*this->_state);
   }
@@ -301,7 +298,12 @@ void PS5Joypad::place_finger(int finger_nr, float x, float y) {
 
 void PS5Joypad::release_finger(int finger_nr) {
   if (finger_nr <= 1) {
-    this->_state->current_state.points[finger_nr].contact = 0xFF;
+    this->_state->touch_points_ids[finger_nr]++;
+    // if it goes above 0x7F we should reset it to 0
+    if (this->_state->touch_points_ids[finger_nr] > 0x7F) {
+      this->_state->touch_points_ids[finger_nr] = 0;
+    }
+    this->_state->current_state.points[finger_nr].contact = 1;
     send_report(*this->_state);
   }
 }
