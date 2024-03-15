@@ -22,14 +22,14 @@ std::vector<std::string> Mouse::get_nodes() const {
 constexpr int ABS_MAX_WIDTH = 19200;
 constexpr int ABS_MAX_HEIGHT = 12000;
 
-static Result<libevdev_uinput_ptr> create_mouse() {
+static Result<libevdev_uinput_ptr> create_mouse(const DeviceDefinition &device) {
   libevdev *dev = libevdev_new();
   libevdev_uinput *uidev;
 
-  libevdev_set_name(dev, "Wolf mouse virtual device");
-  libevdev_set_id_vendor(dev, 0xAB00);
-  libevdev_set_id_product(dev, 0xAB01);
-  libevdev_set_id_version(dev, 0xAB00);
+  libevdev_set_name(dev, device.name.c_str());
+  libevdev_set_id_vendor(dev, device.vendor_id);
+  libevdev_set_id_product(dev, device.product_id);
+  libevdev_set_id_version(dev, device.version);
   libevdev_set_id_bustype(dev, BUS_USB);
 
   libevdev_enable_event_type(dev, EV_KEY);
@@ -104,10 +104,10 @@ Mouse::~Mouse() {
   }
 }
 
-Result<Mouse> Mouse::create() {
+Result<Mouse> Mouse::create(const DeviceDefinition &device) {
   auto mouse = Mouse();
 
-  auto mouse_rel_or_error = create_mouse();
+  auto mouse_rel_or_error = create_mouse(device);
   if (mouse_rel_or_error) {
     mouse._state->mouse_rel = std::move(*mouse_rel_or_error);
   } else {

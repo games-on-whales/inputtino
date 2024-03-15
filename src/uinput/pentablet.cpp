@@ -26,15 +26,14 @@ static constexpr int PRESSURE_MAX = 253;
 static constexpr int DISTANCE_MAX = 1024;
 static constexpr int RESOLUTION = 28;
 
-Result<libevdev_uinput_ptr> create_tablet() {
+Result<libevdev_uinput_ptr> create_tablet(const DeviceDefinition &device) {
   libevdev *dev = libevdev_new();
   libevdev_uinput *uidev;
 
-  libevdev_set_name(dev, "Wolf (virtual) pen tablet");
-  libevdev_set_id_version(dev, 0xAB00);
-
-  libevdev_set_id_product(dev, 0xAB01);
-  libevdev_set_id_version(dev, 0xAB00);
+  libevdev_set_name(dev, device.name.c_str());
+  libevdev_set_id_vendor(dev, device.vendor_id);
+  libevdev_set_id_product(dev, device.product_id);
+  libevdev_set_id_version(dev, device.version);
   libevdev_set_id_bustype(dev, BUS_USB);
 
   libevdev_enable_event_type(dev, EV_KEY);
@@ -84,8 +83,8 @@ PenTablet::~PenTablet() {
   }
 }
 
-Result<PenTablet> PenTablet::create() {
-  auto tablet = create_tablet();
+Result<PenTablet> PenTablet::create(const DeviceDefinition &device) {
+  auto tablet = create_tablet(device);
   if (tablet) {
     PenTablet pt;
     pt._state->pen_tablet = std::move(*tablet);

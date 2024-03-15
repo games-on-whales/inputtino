@@ -20,15 +20,14 @@ std::vector<std::string> Keyboard::get_nodes() const {
   return nodes;
 }
 
-Result<libevdev_uinput_ptr> create_keyboard() {
+Result<libevdev_uinput_ptr> create_keyboard(const DeviceDefinition &device) {
   auto dev = libevdev_new();
   libevdev_uinput *uidev;
 
-  libevdev_set_uniq(dev, "Wolf Keyboard");
-  libevdev_set_name(dev, "Wolf keyboard virtual device");
-  libevdev_set_id_vendor(dev, 0xAB00);
-  libevdev_set_id_product(dev, 0xAB03);
-  libevdev_set_id_version(dev, 0xAB00);
+  libevdev_set_name(dev, device.name.c_str());
+  libevdev_set_id_vendor(dev, device.vendor_id);
+  libevdev_set_id_product(dev, device.product_id);
+  libevdev_set_id_version(dev, device.version);
   libevdev_set_id_bustype(dev, BUS_USB);
 
   libevdev_enable_event_type(dev, EV_KEY);
@@ -71,8 +70,8 @@ Keyboard::~Keyboard() {
   }
 }
 
-Result<Keyboard> Keyboard::create(std::chrono::milliseconds timeout_repress_key) {
-  auto kb_el = create_keyboard();
+Result<Keyboard> Keyboard::create(const DeviceDefinition &device, std::chrono::milliseconds timeout_repress_key) {
+  auto kb_el = create_keyboard(device);
   if (kb_el) {
     Keyboard kb;
     kb._state->kb = std::move(*kb_el);

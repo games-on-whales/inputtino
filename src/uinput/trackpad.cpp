@@ -21,15 +21,14 @@ static constexpr int TOUCH_MAX_Y = 10800;
 static constexpr int NUM_FINGERS = 16; // Apple's touchpads support 16 touches
 static constexpr int PRESSURE_MAX = 253;
 
-Result<libevdev_uinput_ptr> create_trackpad() {
+Result<libevdev_uinput_ptr> create_trackpad(const DeviceDefinition &device) {
   libevdev *dev = libevdev_new();
   libevdev_uinput *uidev;
 
-  libevdev_set_name(dev, "Wolf (virtual) touchpad");
-  libevdev_set_id_version(dev, 0xAB00);
-
-  libevdev_set_id_product(dev, 0xAB01);
-  libevdev_set_id_version(dev, 0xAB00);
+  libevdev_set_name(dev, device.name.c_str());
+  libevdev_set_id_vendor(dev, device.vendor_id);
+  libevdev_set_id_product(dev, device.product_id);
+  libevdev_set_id_version(dev, device.version);
   libevdev_set_id_bustype(dev, BUS_USB);
 
   libevdev_enable_event_type(dev, EV_KEY);
@@ -86,8 +85,8 @@ Trackpad::~Trackpad() {
   }
 }
 
-Result<Trackpad> Trackpad::create() {
-  auto trackpad_el = create_trackpad();
+Result<Trackpad> Trackpad::create(const DeviceDefinition &device) {
+  auto trackpad_el = create_trackpad(device);
   if (trackpad_el) {
     Trackpad trackpad;
     trackpad._state->trackpad = std::move(*trackpad_el);

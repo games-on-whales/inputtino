@@ -23,16 +23,14 @@ std::vector<std::string> SwitchJoypad::get_nodes() const {
   return nodes;
 }
 
-Result<libevdev_uinput_ptr> create_nintendo_controller() {
+Result<libevdev_uinput_ptr> create_nintendo_controller(const DeviceDefinition &device) {
   libevdev *dev = libevdev_new();
   libevdev_uinput *uidev;
 
-  // Nintendo switch pro controller
-  // https://github.com/torvalds/linux/blob/master/drivers/hid/hid-ids.h#L981
-  libevdev_set_name(dev, "Wolf Nintendo (virtual) pad");
-  libevdev_set_id_vendor(dev, 0x057e);
-  libevdev_set_id_product(dev, 0x2009);
-  libevdev_set_id_version(dev, 0x8111);
+  libevdev_set_name(dev, device.name.c_str());
+  libevdev_set_id_vendor(dev, device.vendor_id);
+  libevdev_set_id_product(dev, device.product_id);
+  libevdev_set_id_version(dev, device.version);
   libevdev_set_id_bustype(dev, BUS_USB);
 
   libevdev_enable_event_type(dev, EV_KEY);
@@ -94,8 +92,8 @@ SwitchJoypad::~SwitchJoypad() {
   }
 }
 
-Result<SwitchJoypad> SwitchJoypad::create() {
-  auto joy_el = create_nintendo_controller();
+Result<SwitchJoypad> SwitchJoypad::create(const DeviceDefinition &device) {
+  auto joy_el = create_nintendo_controller(device);
   if (!joy_el) {
     return Error(joy_el.getErrorMessage());
   }

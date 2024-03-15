@@ -109,15 +109,15 @@ PS5Joypad::~PS5Joypad() {
   }
 }
 
-Result<PS5Joypad> PS5Joypad::create() {
+Result<PS5Joypad> PS5Joypad::create(const DeviceDefinition &device) {
   auto def = uhid::DeviceDefinition{
-      .name = "Wolf PS5 Joypad",
-      .phys = "00:11:22:33:44:55",
-      .uniq = "00:11:22:33:44:55",
+      .name = device.name,
+      .phys = device.device_phys,
+      .uniq = device.device_uniq,
       .bus = BUS_USB,
-      .vendor = 0x054C,
-      .product = 0x0CE6,
-      .version = 0x8111,
+      .vendor = static_cast<uint32_t>(device.vendor_id),
+      .product = static_cast<uint32_t>(device.product_id),
+      .version = static_cast<uint32_t>(device.version),
       .country = 0,
       .report_description = {&uhid::ps5_rdesc[0], &uhid::ps5_rdesc[0] + sizeof(uhid::ps5_rdesc)}};
 

@@ -20,15 +20,14 @@ static constexpr int TOUCH_MAX_Y = 10800;
 static constexpr int NUM_FINGERS = 16;
 static constexpr int PRESSURE_MAX = 253;
 
-Result<libevdev_uinput_ptr> create_touch_screen() {
+Result<libevdev_uinput_ptr> create_touch_screen(const DeviceDefinition &device) {
   libevdev *dev = libevdev_new();
   libevdev_uinput *uidev;
 
-  libevdev_set_name(dev, "Wolf (virtual) touch screen");
-  libevdev_set_id_version(dev, 0xAB00);
-
-  libevdev_set_id_product(dev, 0xAB01);
-  libevdev_set_id_version(dev, 0xAB00);
+  libevdev_set_name(dev, device.name.c_str());
+  libevdev_set_id_vendor(dev, device.vendor_id);
+  libevdev_set_id_product(dev, device.product_id);
+  libevdev_set_id_version(dev, device.version);
   libevdev_set_id_bustype(dev, BUS_USB);
 
   libevdev_enable_event_type(dev, EV_KEY);
@@ -80,8 +79,8 @@ TouchScreen::~TouchScreen() {
   }
 }
 
-Result<TouchScreen> TouchScreen::create() {
-  auto touch_screen = create_touch_screen();
+Result<TouchScreen> TouchScreen::create(const DeviceDefinition &device) {
+  auto touch_screen = create_touch_screen(device);
   if (touch_screen) {
     TouchScreen ts;
     ts._state->touch_screen = std::move(*touch_screen);

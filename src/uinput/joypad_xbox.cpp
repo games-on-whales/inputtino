@@ -20,16 +20,14 @@ std::vector<std::string> XboxOneJoypad::get_nodes() const {
   return nodes;
 }
 
-Result<libevdev_uinput_ptr> create_xbox_controller() {
+Result<libevdev_uinput_ptr> create_xbox_controller(const DeviceDefinition &device) {
   libevdev *dev = libevdev_new();
   libevdev_uinput *uidev;
 
-  // Xbox one controller
-  // https://github.com/torvalds/linux/blob/master/drivers/input/joystick/xpad.c#L147
-  libevdev_set_name(dev, "Wolf X-Box One (virtual) pad");
-  libevdev_set_id_vendor(dev, 0x045E);
-  libevdev_set_id_product(dev, 0x02EA);
-  libevdev_set_id_version(dev, 0x0408);
+  libevdev_set_name(dev, device.name.c_str());
+  libevdev_set_id_vendor(dev, device.vendor_id);
+  libevdev_set_id_product(dev, device.product_id);
+  libevdev_set_id_version(dev, device.version);
   libevdev_set_id_bustype(dev, BUS_USB);
 
   libevdev_enable_event_type(dev, EV_KEY);
@@ -89,8 +87,8 @@ XboxOneJoypad::~XboxOneJoypad() {
   }
 }
 
-Result<XboxOneJoypad> XboxOneJoypad::create() {
-  auto joy_el = create_xbox_controller();
+Result<XboxOneJoypad> XboxOneJoypad::create(const DeviceDefinition &device) {
+  auto joy_el = create_xbox_controller(device);
   if (!joy_el) {
     return Error(joy_el.getErrorMessage());
   }

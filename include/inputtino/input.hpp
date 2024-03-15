@@ -20,12 +20,24 @@ public:
   virtual ~VirtualDevice() = default;
 };
 
+struct DeviceDefinition {
+  std::string name;
+  uint16_t vendor_id;
+  uint16_t product_id;
+  uint16_t version;
+
+  std::string device_phys = "00:11:22:33:44:55";
+  std::string device_uniq = "00:11:22:33:44:55";
+};
+
 /**
  * A virtual mouse device
  */
 class Mouse : public VirtualDevice {
 public:
-  static Result<Mouse> create();
+  static Result<Mouse>
+  create(const DeviceDefinition &device = {
+             .name = "Wolf mouse virtual device", .vendor_id = 0xAB00, .product_id = 0xAB01, .version = 0xAB00});
 
   Mouse(Mouse &&j) noexcept : _state(nullptr) {
     std::swap(j._state, _state);
@@ -101,7 +113,9 @@ private:
  */
 class Trackpad : public VirtualDevice {
 public:
-  static Result<Trackpad> create();
+  static Result<Trackpad>
+  create(const DeviceDefinition &device = {
+             .name = "Wolf (virtual) touchpad", .vendor_id = 0xAB00, .product_id = 0xAB02, .version = 0xAB00});
   Trackpad(Trackpad &&j) noexcept : _state(nullptr) {
     std::swap(j._state, _state);
   }
@@ -136,7 +150,9 @@ private:
 class TouchScreen : public VirtualDevice {
 
 public:
-  static Result<TouchScreen> create();
+  static Result<TouchScreen>
+  create(const DeviceDefinition &device = {
+             .name = "Wolf (virtual) touchscreen", .vendor_id = 0xAB00, .product_id = 0xAB03, .version = 0xAB00});
   TouchScreen(TouchScreen &&j) noexcept : _state(nullptr) {
     std::swap(j._state, _state);
   }
@@ -170,7 +186,9 @@ private:
  */
 class PenTablet : public VirtualDevice {
 public:
-  static Result<PenTablet> create();
+  static Result<PenTablet>
+  create(const DeviceDefinition &device = {
+             .name = "Wolf (virtual) pen tablet", .vendor_id = 0xAB00, .product_id = 0xAB04, .version = 0xAB00});
   PenTablet(PenTablet &&j) : _state(nullptr) {
     std::swap(j._state, _state);
   }
@@ -224,7 +242,11 @@ private:
  */
 class Keyboard : public VirtualDevice {
 public:
-  static Result<Keyboard> create(std::chrono::milliseconds timeout_repress_key = 50ms);
+  static Result<Keyboard> create(const DeviceDefinition &device = {.name = "Wolf (virtual) keyboard",
+                                                                   .vendor_id = 0xAB00,
+                                                                   .product_id = 0xAB05,
+                                                                   .version = 0xAB00},
+                                 std::chrono::milliseconds timeout_repress_key = 50ms);
   Keyboard(Keyboard &&j) noexcept : _state(nullptr) {
     std::swap(j._state, _state);
   }
@@ -300,7 +322,13 @@ public:
 
 class XboxOneJoypad : public Joypad {
 public:
-  static Result<XboxOneJoypad> create();
+  static Result<XboxOneJoypad>
+  create(const DeviceDefinition &device = {
+             .name = "Wolf X-Box One (virtual) pad",
+             // https://github.com/torvalds/linux/blob/master/drivers/input/joystick/xpad.c#L147
+             .vendor_id = 0x045E,
+             .product_id = 0x02EA,
+             .version = 0x0408});
   XboxOneJoypad(XboxOneJoypad &&j) noexcept : _state(nullptr) {
     std::swap(j._state, _state);
   }
@@ -323,7 +351,12 @@ private:
 
 class SwitchJoypad : public Joypad {
 public:
-  static Result<SwitchJoypad> create();
+  static Result<SwitchJoypad> create(const DeviceDefinition &device = {
+                                         .name = "Wolf Nintendo (virtual) pad",
+                                         // https://github.com/torvalds/linux/blob/master/drivers/hid/hid-ids.h#L981
+                                         .vendor_id = 0x057e,
+                                         .product_id = 0x2009,
+                                         .version = 0x8111});
   SwitchJoypad(SwitchJoypad &&j) : _state(nullptr) {
     std::swap(j._state, _state);
   }
@@ -346,7 +379,9 @@ private:
 
 class PS5Joypad : public Joypad {
 public:
-  static Result<PS5Joypad> create();
+  static Result<PS5Joypad>
+  create(const DeviceDefinition &device = {
+             .name = "Wolf DualSense (virtual) pad", .vendor_id = 0x054C, .product_id = 0x0CE6, .version = 0x8111});
   PS5Joypad(PS5Joypad &&j) noexcept : _state(nullptr) {
     std::swap(j._state, _state);
   }
