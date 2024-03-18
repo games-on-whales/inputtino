@@ -70,14 +70,14 @@ Keyboard::~Keyboard() {
   }
 }
 
-Result<Keyboard> Keyboard::create(const DeviceDefinition &device, std::chrono::milliseconds timeout_repress_key) {
+Result<Keyboard> Keyboard::create(const DeviceDefinition &device, int millis_repress_key) {
   auto kb_el = create_keyboard(device);
   if (kb_el) {
     Keyboard kb;
     kb._state->kb = std::move(*kb_el);
-    auto repeat_thread = std::thread([state = kb._state, timeout_repress_key]() {
+    auto repeat_thread = std::thread([state = kb._state, millis_repress_key]() {
       while (!state->stop_repeat_thread) {
-        std::this_thread::sleep_for(timeout_repress_key);
+        std::this_thread::sleep_for(std::chrono::milliseconds(millis_repress_key));
         for (auto key : state->cur_press_keys) {
           if (auto keyboard = state->kb.get()) {
             press_btn(keyboard, key);

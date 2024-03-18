@@ -40,8 +40,12 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake/)
 add_library(libinputtino)
 add_library(inputtino::libinputtino ALIAS libinputtino)
 
-target_include_directories(libinputtino PUBLIC include)
-set_target_properties(libinputtino PROPERTIES PUBLIC_HEADER include)
+target_include_directories(libinputtino PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<INSTALL_INTERFACE:include>)
+set_target_properties(libinputtino PROPERTIES
+        VERSION ${PROJECT_VERSION}
+        PUBLIC_HEADER include/inputtino/input.hpp)
 set_target_properties(libinputtino PROPERTIES OUTPUT_NAME "libinputtino")
 
 if (UNIX AND NOT APPLE)
@@ -65,6 +69,11 @@ endif ()
 option(BUILD_SERVER "Build REST server" OFF)
 if (BUILD_SERVER)
     add_subdirectory(src/server)
+endif ()
+
+option(BUILD_PYTHON_BINDINGS "Build Python bindings using Swig" OFF)
+if (BUILD_PYTHON_BINDINGS)
+    add_subdirectory(python)
 endif ()
 
 # All users of this library will need at least C++17

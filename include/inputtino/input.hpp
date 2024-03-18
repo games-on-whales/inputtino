@@ -1,6 +1,5 @@
 #pragma once
 
-#include <chrono>
 #include <cstdint>
 #include <functional>
 #include <inputtino/result.hpp>
@@ -11,8 +10,6 @@
 #include <vector>
 
 namespace inputtino {
-
-using namespace std::chrono_literals;
 
 class VirtualDevice {
 public:
@@ -246,7 +243,7 @@ public:
                                                                    .vendor_id = 0xAB00,
                                                                    .product_id = 0xAB05,
                                                                    .version = 0xAB00},
-                                 std::chrono::milliseconds timeout_repress_key = 50ms);
+                                 int millis_repress_key = 50);
   Keyboard(Keyboard &&j) noexcept : _state(nullptr) {
     std::swap(j._state, _state);
   }

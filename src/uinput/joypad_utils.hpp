@@ -1,4 +1,5 @@
 #pragma once
+#include <chrono>
 #include <cstring>
 #include <fcntl.h>
 #include <inputtino/input.hpp>
@@ -11,6 +12,9 @@
 #include <thread>
 
 namespace inputtino {
+
+using namespace std::chrono_literals;
+
 /**
  * Joypads will also have one `/dev/input/js*` device as child, we want to expose that as well
  */
