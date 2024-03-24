@@ -1,0 +1,15 @@
+[package]
+name = "inputtino"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+rust-version = "1.72"
+links = "libinputtino"
+
+[lib]
+name = "inputtino_rs"
+path = "src/lib.rs"
+
+[build-dependencies]
+bindgen = "0.69.4"
+cmake = "0.1"
