@@ -7,6 +7,7 @@
 using Catch::Matchers::Equals;
 using Catch::Matchers::WithinAbs;
 using namespace inputtino;
+using namespace std::chrono_literals;
 
 void flush_sdl_events() {
   SDL_JoystickUpdate();
@@ -29,7 +30,7 @@ void flush_sdl_events() {
 class SDLTestsFixture {
 public:
   SDLTestsFixture() {
-    SDL_Init(SDL_INIT_EVERYTHING);
+    SDL_Init(SDL_INIT_JOYSTICK | SDL_INIT_HAPTIC | SDL_INIT_GAMECONTROLLER | SDL_INIT_SENSOR);
     SDL_LogSetAllPriority(SDL_LOG_PRIORITY_VERBOSE);
     SDL_GameControllerEventState(SDL_ENABLE);
   }

@@ -9,6 +9,7 @@
 
 using namespace inputtino;
 using Catch::Matchers::WithinRel;
+using namespace std::chrono_literals;
 
 /**
  * TESTS

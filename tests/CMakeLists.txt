@@ -10,7 +10,7 @@ FetchContent_MakeAvailable(Catch2)
 # Tests need to be added as executables first
 add_executable(inputtino_tests main.cpp)
 
-set(SRC_LIST main.cpp)
+set(SRC_LIST main.cpp testCAPI.cpp)
 
 if (UNIX AND NOT APPLE)
     option(TEST_LIBINPUT "Enable libinput test" ON)

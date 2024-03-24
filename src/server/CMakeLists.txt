@@ -1,6 +1,10 @@
 add_library(input_server)
 add_library(inputtino::server ALIAS input_server)
 
+
+# FetchContent added in CMake 3.11, downloads during the configure step
+include(FetchContent)
+
 FetchContent_Declare(
         httplib
         GIT_REPOSITORY https://github.com/yhirose/cpp-httplib.git
