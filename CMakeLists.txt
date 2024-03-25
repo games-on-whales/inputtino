@@ -145,14 +145,6 @@ if (CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
     set_if_undefined(CMAKE_CXX_VISIBILITY_PRESET hidden)
     set_if_undefined(CMAKE_VISIBILITY_INLINES_HIDDEN ON)
 
-    target_include_directories(libinputtino PUBLIC
-            "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
-            "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>")
-    set_target_properties(libinputtino PROPERTIES
-            VERSION ${PROJECT_VERSION}
-            PUBLIC_HEADER "${PUBLIC_HEADERS}")
-    set_target_properties(libinputtino PROPERTIES OUTPUT_NAME "libinputtino")
-
     if(LIBINPUTTINO_INSTALL AND NOT CMAKE_SKIP_INSTALL_RULES)
         install(TARGETS libinputtino
                 EXPORT libinputtino_export
@@ -169,3 +161,11 @@ if (CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
                 DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/inputtino")
     endif ()
 endif ()
+
+target_include_directories(libinputtino PUBLIC
+        "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
+        "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>")
+set_target_properties(libinputtino PROPERTIES
+        VERSION ${PROJECT_VERSION}
+        PUBLIC_HEADER "${PUBLIC_HEADERS}")
+set_target_properties(libinputtino PROPERTIES OUTPUT_NAME "libinputtino")
