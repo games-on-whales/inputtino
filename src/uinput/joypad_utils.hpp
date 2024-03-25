@@ -2,10 +2,10 @@
 #include <chrono>
 #include <cstring>
 #include <fcntl.h>
+#include <filesystem>
 #include <inputtino/input.hpp>
 #include <inputtino/protected_types.hpp>
 #include <iostream>
-#include <libudev.h>
 #include <linux/input.h>
 #include <linux/uinput.h>
 #include <optional>
@@ -20,28 +20,21 @@ using namespace std::chrono_literals;
  */
 static std::vector<std::string> get_child_dev_nodes(libevdev_uinput *device) {
   std::vector<std::string> result;
-  auto udev = udev_new();
-  if (auto device_ptr = udev_device_new_from_syspath(udev, libevdev_uinput_get_syspath(device))) {
-    auto enumerate = udev_enumerate_new(udev);
-    udev_enumerate_add_match_parent(enumerate, device_ptr);
-    udev_enumerate_scan_devices(enumerate);
 
-    udev_list_entry *dev_list_entry;
-    auto devices = udev_enumerate_get_list_entry(enumerate);
-    udev_list_entry_foreach(dev_list_entry, devices) {
-      auto path = udev_list_entry_get_name(dev_list_entry);
-      auto child_dev = udev_device_new_from_syspath(udev, path);
-      if (auto dev_path = udev_device_get_devnode(child_dev)) {
-        result.push_back(dev_path);
-      }
-      udev_device_unref(child_dev);
-    }
-
-    udev_enumerate_unref(enumerate);
-    udev_device_unref(device_ptr);
+  auto dev_path = libevdev_uinput_get_devnode(device);
+  if (dev_path) {
+    result.push_back(dev_path);
   }
 
-  udev_unref(udev);
+  auto sys_path = libevdev_uinput_get_syspath(device);
+  if (sys_path) {
+    for (const auto &entry : std::filesystem::directory_iterator(sys_path)) {
+      if (entry.is_directory() && entry.path().filename().string().rfind("js", 0) == 0) { // starts with "js"?
+        result.push_back("/dev/input/" + entry.path().filename().string());
+      }
+    }
+  }
+
   return result;
 }
 

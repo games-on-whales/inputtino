@@ -84,11 +84,9 @@ option(LIBINPUTTINO_INSTALL "Generate the install target" OFF)
 if (UNIX AND NOT APPLE)
     find_package(PkgConfig)
     pkg_check_modules(LIBEVDEV REQUIRED IMPORTED_TARGET libevdev)
-    pkg_check_modules(LIBUDEV REQUIRED IMPORTED_TARGET libudev)
     target_link_libraries(libinputtino
             PUBLIC
-            PkgConfig::LIBEVDEV
-            PkgConfig::LIBUDEV)
+            PkgConfig::LIBEVDEV)
 endif ()
 
 find_program(CCACHE_FOUND ccache)

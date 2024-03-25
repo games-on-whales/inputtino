@@ -4,9 +4,7 @@
 #include <inputtino/input.hpp>
 #include <inputtino/protected_types.hpp>
 #include <iostream>
-#include <libudev.h>
 #include <linux/input.h>
-#include <linux/uinput.h>
 #include <optional>
 #include <thread>
 

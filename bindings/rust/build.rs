@@ -30,7 +30,6 @@ fn main() {
     // Dependencies
     if !build_static {
         println!("cargo:rustc-link-lib=evdev");
-        println!("cargo:rustc-link-lib=udev");
         println!("cargo:rustc-link-lib=stdc++");
     }
 

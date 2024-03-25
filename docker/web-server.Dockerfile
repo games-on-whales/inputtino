@@ -29,7 +29,6 @@ RUN apt-get update -y && \
     pkg-config \
     git \
     libevdev-dev \
-    libudev-dev \
     && rm -rf /var/lib/apt/lists/*
 
 COPY . /inputtino/
@@ -61,7 +60,6 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update -y && \
     apt-get install -y --no-install-recommends \
     libevdev2 \
-    libudev1 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /inputtino
