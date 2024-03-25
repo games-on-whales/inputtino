@@ -139,35 +139,33 @@ endif ()
 # Install
 #----------------------------------------------------------------------------------------------------------------------
 
-# Only export explicitly defined symbols
-set_if_undefined(CMAKE_CXX_VISIBILITY_PRESET hidden)
-set_if_undefined(CMAKE_VISIBILITY_INLINES_HIDDEN ON)
+# Only do these if this is the main project, and not if it is included through add_subdirectory
+if (CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
+    # Only export explicitly defined symbols
+    set_if_undefined(CMAKE_CXX_VISIBILITY_PRESET hidden)
+    set_if_undefined(CMAKE_VISIBILITY_INLINES_HIDDEN ON)
 
-target_include_directories(libinputtino PUBLIC
-        "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
-        "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>")
-set_target_properties(libinputtino PROPERTIES
-        VERSION ${PROJECT_VERSION}
-        PUBLIC_HEADER "${PUBLIC_HEADERS}")
-set_target_properties(libinputtino PROPERTIES OUTPUT_NAME "libinputtino")
+    target_include_directories(libinputtino PUBLIC
+            "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
+            "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>")
+    set_target_properties(libinputtino PROPERTIES
+            VERSION ${PROJECT_VERSION}
+            PUBLIC_HEADER "${PUBLIC_HEADERS}")
+    set_target_properties(libinputtino PROPERTIES OUTPUT_NAME "libinputtino")
 
-if(LIBINPUTTINO_INSTALL AND NOT CMAKE_SKIP_INSTALL_RULES)
-    install(TARGETS libinputtino
-            EXPORT libinputtino_export
-            RUNTIME COMPONENT libinputtino
-            LIBRARY COMPONENT libinputtino
-            NAMELINK_COMPONENT libinputtino-dev
-            ARCHIVE COMPONENT libinputtino-dev
-            INCLUDES DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
-    install(DIRECTORY include/
-            TYPE INCLUDE
-            COMPONENT libinputtino-dev)
-    install(FILES "${CMAKE_CURRENT_BINARY_DIR}/include/inputtino/${export_file_name}"
-            COMPONENT libinputtino-dev
-            DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/inputtino")
+    if(LIBINPUTTINO_INSTALL AND NOT CMAKE_SKIP_INSTALL_RULES)
+        install(TARGETS libinputtino
+                EXPORT libinputtino_export
+                RUNTIME COMPONENT libinputtino
+                LIBRARY COMPONENT libinputtino
+                NAMELINK_COMPONENT libinputtino-dev
+                ARCHIVE COMPONENT libinputtino-dev
+                INCLUDES DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
+        install(DIRECTORY include/
+                TYPE INCLUDE
+                COMPONENT libinputtino-dev)
+        install(FILES "${CMAKE_CURRENT_BINARY_DIR}/include/inputtino/${export_file_name}"
+                COMPONENT libinputtino-dev
+                DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/inputtino")
+    endif ()
 endif ()
-
-# state that libinputtino need PIC when the default is shared libraries
-set_target_properties(libinputtino PROPERTIES
-        POSITION_INDEPENDENT_CODE ${BUILD_SHARED_LIBS}
-)
