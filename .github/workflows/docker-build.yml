@@ -1,6 +1,11 @@
 name: Docker build
 
 on:
+  pull_request:
+    types:
+      - "opened"
+      - "reopened"
+      - "synchronize"
   push:
     paths-ignore:
       - "docs"
