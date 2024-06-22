@@ -102,7 +102,7 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GHCR_TOKEN }}
 
-      - name: Build Wolf
+      - name: Build inputtino
         uses: docker/build-push-action@v3
         with:
           builder: ${{ steps.buildx.outputs.name }}
