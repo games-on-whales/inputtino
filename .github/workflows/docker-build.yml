@@ -52,6 +52,13 @@ jobs:
             echo "cache_from=type=registry,ref=${REGISTRY_IMAGE}:buildcache" >> $GITHUB_OUTPUT
             echo "cache_to=" >> $GITHUB_OUTPUT
           fi
+          
+          # No token present, might be a PR. Allow build without push
+          if [ "$IMAGES" = "" ]; then
+            IMAGES="gameonwhales/inputtino"
+            PUSH=false
+          fi
+          
           echo "images=${IMAGES}" >> $GITHUB_OUTPUT
           echo "push=${PUSH}" >> $GITHUB_OUTPUT
           echo "github_server_url=${GITHUB_SERVER_URL}" >> $GITHUB_OUTPUT
