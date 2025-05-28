@@ -30,11 +30,13 @@ fn main() {
         .build();
 
     println!("cargo:rustc-link-search=native={}/lib", dst.display());
+    println!("cargo:rustc-link-search=native={}/lib64", dst.display());
     bindings = bindings.clang_arg(format!("-I{}/include/", dst.display()));
 
     // Dependencies
     println!("cargo:rustc-link-lib=evdev");
     println!("cargo:rustc-link-lib=stdc++");
+    println!("cargo:rustc-link-lib=c++");
     println!("cargo:rustc-link-lib=static=libinputtino");
 
     let out = bindings.generate().expect("Unable to generate bindings");
