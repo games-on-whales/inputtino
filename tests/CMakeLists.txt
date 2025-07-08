@@ -23,6 +23,7 @@ if (UNIX AND NOT APPLE)
         if (SDL_CUSTOM_SRC)
             SET(SDL_TEST OFF)
             SET(SDL_HIDAPI_JOYSTICK ON)
+            SET(SDL_PIPEWIRE OFF)
             add_subdirectory(${SDL_CUSTOM_SRC} ${CMAKE_CURRENT_BINARY_DIR}/sdl EXCLUDE_FROM_ALL)
         else ()
             find_package(SDL2 REQUIRED CONFIG REQUIRED COMPONENTS SDL2)
@@ -35,6 +36,10 @@ if (UNIX AND NOT APPLE)
         list(APPEND SRC_LIST
                 "testJoypads.cpp"
                 "testLibinput.cpp")
+
+        if (USE_UHID)
+            list(APPEND SRC_LIST "testUHID.cpp")
+        endif ()
     endif ()
 endif ()
 
