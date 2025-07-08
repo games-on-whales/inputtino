@@ -74,6 +74,7 @@ generate_export_header(libinputtino EXPORT_FILE_NAME include/inputtino/${export_
 
 option(BUILD_C_BINDINGS "Build C bindings" OFF)
 option(LIBINPUTTINO_INSTALL "Generate the install target" OFF)
+option(USE_UHID "Add uhid implementation for advanced DualSense features" ON)
 
 #----------------------------------------------------------------------------------------------------------------------
 # Dependencies
@@ -107,12 +108,26 @@ set(PUBLIC_HEADERS
         include/inputtino/input.h)
 
 if (UNIX AND NOT APPLE)
-    file(GLOB SRC_LIST SRCS src/uinput/*.cpp)
-    target_sources(libinputtino PRIVATE
-            ${SRC_LIST}
-            "src/uinput/joypad_utils.hpp"
-            "src/uhid/joypad_ps5.cpp")
-    target_include_directories(libinputtino PUBLIC "src/uinput/include" "src/uhid/include/")
+    list(APPEND SRC_LIST
+            "src/uinput/joypad_nintendo.cpp"
+            "src/uinput/joypad_xbox.cpp"
+            "src/uinput/keyboard.cpp"
+            "src/uinput/mouse.cpp"
+            "src/uinput/pentablet.cpp"
+            "src/uinput/touchscreen.cpp"
+            "src/uinput/trackpad.cpp")
+
+    if (USE_UHID)
+        message("Using uhid implementation for DualSense controller")
+        list(APPEND SRC_LIST "src/uhid/joypad_ps5.cpp")
+        target_include_directories(libinputtino PUBLIC "src/uhid/include/")
+    else ()
+        message("Using uinput implementation for DualSense controller")
+        list(APPEND SRC_LIST "src/uinput/joypad_ps.cpp")
+    endif ()
+
+    target_sources(libinputtino PRIVATE ${SRC_LIST})
+    target_include_directories(libinputtino PUBLIC "src/uinput/include")
 endif ()
 
 if (BUILD_C_BINDINGS)

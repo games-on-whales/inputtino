@@ -191,7 +191,7 @@ TEST_CASE("C PS5 API", "[C-API]") {
   std::this_thread::sleep_for(std::chrono::milliseconds(50));
   int num_nodes = 0;
   auto nodes = inputtino_joypad_ps5_get_nodes(ps_pad, &num_nodes);
-  REQUIRE(num_nodes == 5);
+  REQUIRE(num_nodes >= 2);
   REQUIRE_THAT(std::string(nodes[0]), Catch::Matchers::StartsWith("/dev/input/"));
 
   { // TODO: test that this actually work
