@@ -115,7 +115,7 @@ inputtino::Result<Device> Device::create(const DeviceDefinition &definition,
   ev.type = UHID_CREATE2, ev.u.create2.bus = definition.bus, ev.u.create2.vendor = definition.vendor,
   ev.u.create2.product = definition.product, ev.u.create2.version = definition.version,
   ev.u.create2.country = definition.country,
-  ev.u.create2.rd_size = static_cast<__u16>(definition.report_description.size()),
+  ev.u.create2.rd_size = static_cast<std::uint16_t>(definition.report_description.size()),
   std::copy(definition.report_description.begin(), definition.report_description.end(), ev.u.create2.rd_data);
   set_c_str(definition.name, ev.u.create2.name);
   set_c_str(definition.phys, ev.u.create2.phys);

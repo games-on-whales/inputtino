@@ -100,8 +100,8 @@ static ActiveRumbleEffect create_rumble_effect(const ff_effect &effect) {
   ActiveRumbleEffect r_effect{
       .start_point = std::chrono::steady_clock::time_point::min(),
       .end_point = std::chrono::steady_clock::time_point::min(),
-      .length = std::chrono::milliseconds{std::clamp(effect.replay.length, (__u16)0, (__u16)32767)},
-      .delay = std::chrono::milliseconds{std::clamp(effect.replay.delay, (__u16)0, (__u16)32767)},
+      .length = std::chrono::milliseconds{std::clamp(effect.replay.length, (std::uint16_t)0, (std::uint16_t)32767)},
+      .delay = std::chrono::milliseconds{std::clamp(effect.replay.delay, (std::uint16_t)0, (std::uint16_t)32767)},
       .envelope = {}};
   switch (effect.type) {
   case FF_CONSTANT:
