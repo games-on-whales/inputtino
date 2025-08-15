@@ -57,7 +57,7 @@ public:
     if (SDL_Init(SDL_INIT_JOYSTICK | SDL_INIT_HAPTIC | SDL_INIT_GAMECONTROLLER | SDL_INIT_SENSOR | SDL_INIT_EVENTS) <
         0) {
       std::cerr << "SDL could not initialize! SDL_Error: " << SDL_GetError() << std::endl;
-        }
+    }
     SDL_LogSetAllPriority(SDL_LOG_PRIORITY_VERBOSE);
     SDL_GameControllerEventState(SDL_ENABLE);
   }
@@ -66,7 +66,6 @@ public:
     SDL_Quit();
   }
 };
-
 
 #define SDL_TEST_BUTTON(JOYPAD_BTN, SDL_BTN)                                                                           \
   REQUIRE(SDL_GameControllerGetButton(gc, SDL_BTN) == 0);                                                              \
@@ -467,4 +466,17 @@ TEST_CASE("Bluetooth CRC32", "[PS]") {
   auto crc2 = CRC32(&PS_INPUT_CRC32_SEED, 1, 0xFFFFFFFF);
   crc2 = CRC32(reinterpret_cast<unsigned char *>(buffer.data()), buffer.length(), crc2);
   REQUIRE(crc2 == 0x9498b398);
+}
+
+TEST_CASE("Test MAC address", "[PS]") {
+  DeviceDefinition def = {.name = "Wolf DualSense (virtual) pad",
+                          .vendor_id = 0x054C,
+                          .product_id = 0x0CE6,
+                          .version = 0x8111,
+                          .device_uniq = "AA:00:CC:11:EE:22"};
+
+  auto joypad = std::move(*PS5Joypad::create(def));
+
+  std::this_thread::sleep_for(50ms);
+  REQUIRE_THAT(joypad.get_mac_address(), Equals("aa:00:cc:11:ee:22"));
 }

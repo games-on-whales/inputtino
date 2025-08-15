@@ -79,7 +79,8 @@ Result<libevdev_uinput_ptr> create_ps_controller(const DeviceDefinition &device)
   return libevdev_uinput_ptr{uidev, ::libevdev_uinput_destroy};
 }
 
-PS5Joypad::PS5Joypad(uint16_t vendor_id) : _state(std::make_shared<PS5JoypadState>()) {}
+PS5Joypad::PS5Joypad(uint16_t vendor_id, std::array<unsigned char, 6> mac_address) : _state(std::make_shared<PS5JoypadState>()) {
+}
 
 PS5Joypad::~PS5Joypad() {
   if (_state) {

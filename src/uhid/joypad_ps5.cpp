@@ -216,16 +216,9 @@ static void on_uhid_event(std::shared_ptr<PS5JoypadState> state, uhid_event ev, 
   }
 }
 
-void generate_mac_address(PS5JoypadState *state) {
-  auto rand = std::bind(std::uniform_int_distribution<unsigned char>{0, 0xFF},
-                        std::default_random_engine{std::random_device()()});
-  for (int i = 0; i < 6; i++) {
-    state->mac_address[i] = rand();
-  }
-}
-
-PS5Joypad::PS5Joypad(uint16_t vendor_id) : _state(std::make_shared<PS5JoypadState>()) {
-  generate_mac_address(this->_state.get());
+PS5Joypad::PS5Joypad(uint16_t vendor_id, std::array<unsigned char, 6> mac_address)
+    : _state(std::make_shared<PS5JoypadState>()) {
+  std::copy(mac_address.begin(), mac_address.end(), this->_state->mac_address);
   this->_state->vendor_id = vendor_id;
   // Set touchpad as not pressed
   this->_state->current_state.points[0].contact = 1;
@@ -265,10 +258,24 @@ Result<PS5Joypad> PS5Joypad::create(const DeviceDefinition &device) {
     def.report_description = {&uhid::ps5_rdesc[0], &uhid::ps5_rdesc[0] + sizeof(uhid::ps5_rdesc)};
   }
 
-  auto joypad = PS5Joypad(device.vendor_id);
+  std::array<unsigned char, 6> mac_address = {};
+  if (def.uniq.empty()) {
+    mac_address = generate_mac_address();
+  } else {
+    // Assuming we have in input a MAC address in the format of xx:xx:xx:xx:xx:xx
+    std::stringstream ss(def.uniq);
+    for (int i = 0; i < 6; ++i) {
+      unsigned int value;
+      ss >> std::hex >> value;
+      mac_address[i] = static_cast<unsigned char>(value);
+      if (i < 5)
+        ss.ignore(1, ':');
+    }
+  }
+  auto joypad = PS5Joypad(device.vendor_id, mac_address);
 
   if (def.phys.empty()) {
-    def.phys = joypad.get_mac_address();
+    def.phys = "INPUTTINO_BT_LINK";
   }
   if (def.uniq.empty()) {
     def.uniq = joypad.get_mac_address();
