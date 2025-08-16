@@ -255,6 +255,8 @@ TEST_CASE_METHOD(SDLTestsFixture, "Nintendo Joypad", "[SDL]") {
   SDL_GameControllerClose(gc);
 }
 
+#ifndef USE_UHID
+// This test is only valid when using the uinput backend
 TEST_CASE_METHOD(SDLTestsFixture, "PS Joypad (basic)", "[SDL],[PS]") {
   // Create the controller
   auto joypad = std::move(*PS5Joypad::create());
@@ -332,3 +334,4 @@ TEST_CASE_METHOD(SDLTestsFixture, "PS Joypad (basic)", "[SDL],[PS]") {
 
   SDL_GameControllerClose(gc);
 }
+#endif // USE_UHID

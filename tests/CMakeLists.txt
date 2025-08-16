@@ -38,6 +38,7 @@ if (UNIX AND NOT APPLE)
                 "testLibinput.cpp")
 
         if (USE_UHID)
+            target_compile_definitions(inputtino_tests PRIVATE USE_UHID)
             list(APPEND SRC_LIST "testUHID.cpp")
         endif ()
     endif ()
