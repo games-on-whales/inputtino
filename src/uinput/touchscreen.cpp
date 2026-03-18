@@ -32,7 +32,6 @@ Result<libevdev_uinput_ptr> create_touch_screen(const DeviceDefinition &device) 
   libevdev_set_id_bustype(dev, BUS_USB);
 
   libevdev_enable_event_type(dev, EV_KEY);
-  libevdev_enable_event_code(dev, EV_KEY, BTN_LEFT, nullptr);
   libevdev_enable_event_code(dev, EV_KEY, BTN_TOUCH, nullptr);
 
   libevdev_enable_event_type(dev, EV_ABS);
