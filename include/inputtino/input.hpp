@@ -25,7 +25,7 @@ namespace inputtino {
  * SwitchJoypad expose. It requires `/dev/uhid` (root, plus the
  * udev rule in `src/uhid/README.adoc`); on locked-down hosts it
  * doesn't exist and the fallback uinput implementations
- * (PS5JoypadUinput, SwitchJoypad, XboxOneJoypad) should be used
+ * (PS5JoypadUinput, SwitchJoypadUinput, XboxOneJoypad) should be used
  * instead.
  *
  * Probes by `open("/dev/uhid", O_RDWR)` once and caches the result
@@ -363,7 +363,7 @@ public:
    *
    * Picks the backend at runtime: when `prefer_uhid` is true and the host can
    * create uhid devices, returns the rich uhid pad (`PS5Joypad` / `SwitchJoypad`);
-   * otherwise the basic uinput pad (`PS5JoypadUinput` / `SwitchJoypad`).
+   * otherwise the basic uinput pad (`PS5JoypadUinput` / `SwitchJoypadUinput`).
    * `XBOX` is uinput-only. The pad is owned through this `Joypad` base, so any
    * capability is reachable via the base interface — unsupported ones are safe
    * no-ops; gate motion on `supports_motion()`.
@@ -495,6 +495,58 @@ private:
   XboxOneJoypad();
 };
 
+class SwitchJoypad : public Joypad {
+public:
+  static Result<SwitchJoypad> create(const DeviceDefinition &device = {
+                                         .name = "Wolf Nintendo (virtual) pad",
+                                         // https://github.com/torvalds/linux/blob/master/drivers/hid/hid-ids.h#L981
+                                         .vendor_id = 0x057e,
+                                         .product_id = 0x2009,
+                                         .version = 0x8111});
+  SwitchJoypad(SwitchJoypad &&j) noexcept : _state(nullptr) {
+    std::swap(j._state, _state);
+    std::swap(j._send_input_thread, _send_input_thread);
+  }
+  ~SwitchJoypad() override;
+
+  std::vector<std::string> get_nodes() const override;
+  std::vector<UdevEvent> get_udev_events() const override;
+  std::vector<UdevHwDbEntry> get_udev_hw_db_entries() const override;
+
+  std::string get_mac_address() const;
+
+  std::vector<std::string> get_sys_nodes() const;
+
+  void set_pressed_buttons(unsigned int newly_pressed) override;
+  void set_triggers(int16_t left, int16_t right) override;
+  void set_stick(STICK_POSITION stick_type, short x, short y) override;
+  bool supports_motion() const override {
+    return true;
+  }
+  /**
+   * Forward a gyroscope sample, in deg/s (SDL / Moonlight convention). Unlike
+   * PS5's rad/s report no unit fix is needed — only the SDL->hid-nintendo frame
+   * remap. Axes follow the SDL convention.
+   */
+  void set_gyro(float x, float y, float z) override;
+
+  /**
+   * Forward an accelerometer sample, in m/s^2 (inclusive of gravity); SDL axis
+   * convention, with the SDL->hid-nintendo frame remap.
+   */
+  void set_accel(float x, float y, float z) override;
+  void set_on_rumble(const std::function<void(int low_freq, int high_freq)> &callback) override;
+
+protected:
+  typedef struct SwitchJoypadState SwitchJoypadState;
+  std::shared_ptr<SwitchJoypadState> _state;
+
+private:
+  std::thread _send_input_thread;
+
+  SwitchJoypad(const Mac &mac);
+};
+
 class PS5Joypad : public Joypad {
 public:
   static Result<PS5Joypad>
@@ -612,15 +664,15 @@ private:
  * Joypad API, matching SwitchJoypad), sticks and rumble. No motion (inherits
  * the base no-op + supports_motion() == false). uinput-only fallback.
  */
-class SwitchJoypad : public Joypad {
+class SwitchJoypadUinput : public Joypad {
 public:
-  static Result<SwitchJoypad>
+  static Result<SwitchJoypadUinput>
   create(const DeviceDefinition &device = {
              .name = "Wolf Nintendo (virtual) pad", .vendor_id = 0x057e, .product_id = 0x2009, .version = 0x8111});
-  SwitchJoypad(SwitchJoypad &&j) noexcept : _state(nullptr) {
+  SwitchJoypadUinput(SwitchJoypadUinput &&j) noexcept : _state(nullptr) {
     std::swap(j._state, _state);
   }
-  ~SwitchJoypad() override;
+  ~SwitchJoypadUinput() override;
 
   std::vector<std::string> get_nodes() const override;
   std::vector<UdevEvent> get_udev_events() const override;
@@ -632,11 +684,11 @@ public:
   void set_on_rumble(const std::function<void(int low_freq, int high_freq)> &callback) override;
 
 protected:
-  typedef struct SwitchJoypadState SwitchJoypadState;
-  std::shared_ptr<SwitchJoypadState> _state;
+  typedef struct SwitchJoypadUinputState SwitchJoypadUinputState;
+  std::shared_ptr<SwitchJoypadUinputState> _state;
 
 private:
-  SwitchJoypad();
+  SwitchJoypadUinput();
 };
 
 } // namespace inputtino

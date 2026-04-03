@@ -10,7 +10,7 @@
 
 namespace inputtino {
 
-std::vector<std::string> SwitchJoypad::get_nodes() const {
+std::vector<std::string> SwitchJoypadUinput::get_nodes() const {
   std::vector<std::string> nodes;
 
   if (auto joy = _state->joy.get()) {
@@ -21,11 +21,11 @@ std::vector<std::string> SwitchJoypad::get_nodes() const {
   return nodes;
 }
 
-std::vector<Joypad::UdevEvent> SwitchJoypad::get_udev_events() const {
+std::vector<Joypad::UdevEvent> SwitchJoypadUinput::get_udev_events() const {
   return gen_joystick_udev_events(_state);
 }
 
-std::vector<Joypad::UdevHwDbEntry> SwitchJoypad::get_udev_hw_db_entries() const {
+std::vector<Joypad::UdevHwDbEntry> SwitchJoypadUinput::get_udev_hw_db_entries() const {
   return gen_joystick_udev_hw_db(_state);
 }
 
@@ -87,9 +87,9 @@ static Result<libevdev_uinput_ptr> create_nintendo_controller(const DeviceDefini
   return libevdev_uinput_ptr{uidev, ::libevdev_uinput_destroy};
 }
 
-SwitchJoypad::SwitchJoypad() : _state(std::make_shared<SwitchJoypadState>()) {}
+SwitchJoypadUinput::SwitchJoypadUinput() : _state(std::make_shared<SwitchJoypadUinputState>()) {}
 
-SwitchJoypad::~SwitchJoypad() {
+SwitchJoypadUinput::~SwitchJoypadUinput() {
   if (_state) {
     _state->stop_listening_events = true;
     if (_state->joy.get() != nullptr && _state->events_thread.joinable()) {
@@ -98,13 +98,13 @@ SwitchJoypad::~SwitchJoypad() {
   }
 }
 
-Result<SwitchJoypad> SwitchJoypad::create(const DeviceDefinition &device) {
+Result<SwitchJoypadUinput> SwitchJoypadUinput::create(const DeviceDefinition &device) {
   auto joy_el = create_nintendo_controller(device);
   if (!joy_el) {
     return Error(joy_el.getErrorMessage());
   }
 
-  SwitchJoypad joypad;
+  SwitchJoypadUinput joypad;
   joypad._state->joy = std::move(*joy_el);
 
   joypad._state->events_thread = std::thread(event_listener, joypad._state);
@@ -112,8 +112,7 @@ Result<SwitchJoypad> SwitchJoypad::create(const DeviceDefinition &device) {
 
   return joypad;
 }
-
-void SwitchJoypad::set_pressed_buttons(unsigned int newly_pressed) {
+void SwitchJoypadUinput::set_pressed_buttons(unsigned int newly_pressed) {
   // Button flags that have been changed between current and prev
   auto bf_changed = newly_pressed ^ this->_state->currently_pressed_btns;
   // Button flags that are only part of the new packet
@@ -151,14 +150,16 @@ void SwitchJoypad::set_pressed_buttons(unsigned int newly_pressed) {
         // Capture button
         libevdev_uinput_write_event(controller, EV_KEY, BTN_Z, bf_new & MISC_FLAG ? 1 : 0);
       }
+      // Positional remap to keep the Joypad API (Xbox naming) consistent
+      // across backends. See also src/uhid/joypad_switch.cpp.
       if (A & bf_changed)
-        libevdev_uinput_write_event(controller, EV_KEY, BTN_EAST, bf_new & A ? 1 : 0);
+        libevdev_uinput_write_event(controller, EV_KEY, BTN_SOUTH, bf_new & A ? 1 : 0);
       if (B & bf_changed)
-        libevdev_uinput_write_event(controller, EV_KEY, BTN_SOUTH, bf_new & B ? 1 : 0);
+        libevdev_uinput_write_event(controller, EV_KEY, BTN_EAST, bf_new & B ? 1 : 0);
       if (X & bf_changed)
-        libevdev_uinput_write_event(controller, EV_KEY, BTN_NORTH, bf_new & X ? 1 : 0);
+        libevdev_uinput_write_event(controller, EV_KEY, BTN_WEST, bf_new & X ? 1 : 0);
       if (Y & bf_changed)
-        libevdev_uinput_write_event(controller, EV_KEY, BTN_WEST, bf_new & Y ? 1 : 0);
+        libevdev_uinput_write_event(controller, EV_KEY, BTN_NORTH, bf_new & Y ? 1 : 0);
     }
 
     libevdev_uinput_write_event(controller, EV_SYN, SYN_REPORT, 0);
@@ -166,7 +167,7 @@ void SwitchJoypad::set_pressed_buttons(unsigned int newly_pressed) {
   this->_state->currently_pressed_btns = bf_new;
 }
 
-void SwitchJoypad::set_stick(Joypad::STICK_POSITION stick_type, short x, short y) {
+void SwitchJoypadUinput::set_stick(Joypad::STICK_POSITION stick_type, short x, short y) {
   if (auto controller = this->_state->joy.get()) {
     if (stick_type == LS) {
       libevdev_uinput_write_event(controller, EV_ABS, ABS_X, x);
@@ -180,7 +181,7 @@ void SwitchJoypad::set_stick(Joypad::STICK_POSITION stick_type, short x, short y
   }
 }
 
-void SwitchJoypad::set_triggers(int16_t left, int16_t right) {
+void SwitchJoypadUinput::set_triggers(int16_t left, int16_t right) {
   if (auto controller = this->_state->joy.get()) {
     // Nintendo ZL and ZR are just buttons (EV_KEY)
     libevdev_uinput_write_event(controller, EV_KEY, BTN_TL2, left > 0 ? 1 : 0);
@@ -191,7 +192,7 @@ void SwitchJoypad::set_triggers(int16_t left, int16_t right) {
   }
 }
 
-void SwitchJoypad::set_on_rumble(const std::function<void(int, int)> &callback) {
+void SwitchJoypadUinput::set_on_rumble(const std::function<void(int, int)> &callback) {
   this->_state->on_rumble = callback;
 }
 

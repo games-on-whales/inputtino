@@ -51,7 +51,7 @@ struct BaseJoypadState {
 };
 
 struct XboxOneJoypadState : BaseJoypadState {};
-struct SwitchJoypadState : BaseJoypadState {};
+struct SwitchJoypadUinputState : BaseJoypadState {};
 
 struct KeyboardState {
   std::thread repeat_press_t;
