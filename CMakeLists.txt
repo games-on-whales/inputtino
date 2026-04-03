@@ -108,7 +108,7 @@ set(PUBLIC_HEADERS
         include/inputtino/input.h)
 
 if (UNIX AND NOT APPLE)
-    # The basic uinput joypads (XboxOneJoypad, PS5JoypadUinput, SwitchJoypad)
+    # The basic uinput joypads (XboxOneJoypad, PS5JoypadUinput, SwitchJoypadUinput)
     # are always built: they need only uinput and act as the universal fallback
     # picked by create_joypad() when /dev/uhid is unavailable.
     list(APPEND SRC_LIST
@@ -130,6 +130,7 @@ if (UNIX AND NOT APPLE)
     if (USE_UHID)
         message("Building uhid joypads (PS5Joypad / SwitchJoypad) alongside the uinput fallbacks")
         list(APPEND SRC_LIST "src/uhid/joypad_ps5.cpp" "src/uhid/uhid.cpp")
+        list(APPEND SRC_LIST "src/uhid/joypad_switch.cpp")
         target_include_directories(libinputtino PUBLIC "src/uhid/include/")
         target_compile_definitions(libinputtino PRIVATE INPUTTINO_USE_UHID)
     else ()

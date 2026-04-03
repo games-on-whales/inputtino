@@ -41,7 +41,7 @@ TEST_CASE("uinput DualSense pad: no rich features, safe no-ops, self-describes",
 }
 
 TEST_CASE("uinput Nintendo pad: no motion, self-describes", "[Factory]") {
-  auto created = SwitchJoypad::create();
+  auto created = SwitchJoypadUinput::create();
   REQUIRE(created);
   auto joypad = std::move(*created);
 
@@ -73,10 +73,14 @@ TEST_CASE("Joypad::create picks the rich uhid backend when preferred", "[Factory
     SKIP("This host has no accessible /dev/uhid");
   }
 
-  // The uhid DualSense forwards motion; that's the observable difference from
-  // its uinput fallback. (The uhid Switch Pro backend lands in a follow-up PR.)
+  // The uhid DualSense / Switch Pro pads forward motion; that's the observable
+  // difference from their uinput fallbacks.
   auto ps = Joypad::create(Joypad::TYPE::PS, /* prefer_uhid */ true);
   REQUIRE(ps);
   REQUIRE((*ps)->supports_motion());
+
+  auto nintendo = Joypad::create(Joypad::TYPE::NINTENDO, /* prefer_uhid */ true);
+  REQUIRE(nintendo);
+  REQUIRE((*nintendo)->supports_motion());
 }
 #endif

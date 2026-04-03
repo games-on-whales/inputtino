@@ -74,9 +74,19 @@ Result<std::unique_ptr<Joypad>> Joypad::create(Joypad::TYPE kind, const DeviceDe
 #endif
     return as_joypad(PS5JoypadUinput::create(device));
   case Joypad::TYPE::NINTENDO:
-    // uinput-only for now; the uhid Switch backend lands in a follow-up PR.
+#ifdef INPUTTINO_USE_UHID
+    if (prefer_uhid) {
+      if (auto pad = SwitchJoypad::create(device)) {
+        return std::unique_ptr<Joypad>(std::make_unique<SwitchJoypad>(std::move(*pad)));
+      } else {
+        std::cerr << "inputtino: uhid Switch joypad creation failed (" << pad.getErrorMessage()
+                  << "), falling back to the uinput backend" << std::endl;
+      }
+    }
+#else
     (void)prefer_uhid;
-    return as_joypad(SwitchJoypad::create(device));
+#endif
+    return as_joypad(SwitchJoypadUinput::create(device));
   }
   return Error("Joypad::create: unknown Joypad::TYPE");
 }
