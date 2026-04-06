@@ -44,6 +44,11 @@ DeviceDefinition Joypad::default_definition(Joypad::TYPE kind) {
     return {.name = "Wolf X-Box One (virtual) pad", .vendor_id = 0x045E, .product_id = 0x02EA, .version = 0x0408};
   case Joypad::TYPE::PS:
     return {.name = "Wolf DualSense (virtual) pad", .vendor_id = 0x054C, .product_id = 0x0CE6, .version = 0x8111};
+  case Joypad::TYPE::JOYCON_LEFT:
+    // hid-nintendo keys the Joy-Con side off the product id (0x2006 = left).
+    return {.name = "Wolf Joy-Con (L) (virtual) pad", .vendor_id = 0x057e, .product_id = 0x2006, .version = 0x8111};
+  case Joypad::TYPE::JOYCON_RIGHT:
+    return {.name = "Wolf Joy-Con (R) (virtual) pad", .vendor_id = 0x057e, .product_id = 0x2007, .version = 0x8111};
   case Joypad::TYPE::NINTENDO:
     return {.name = "Wolf Nintendo (virtual) pad", .vendor_id = 0x057e, .product_id = 0x2009, .version = 0x8111};
   }
@@ -73,6 +78,10 @@ Result<std::unique_ptr<Joypad>> Joypad::create(Joypad::TYPE kind, const DeviceDe
     (void)prefer_uhid;
 #endif
     return as_joypad(PS5JoypadUinput::create(device));
+  // Pro Controller and the two Joy-Cons are the same hid-nintendo pad; the
+  // SwitchJoypad picks Pro / L / R from device.product_id (see default_definition).
+  case Joypad::TYPE::JOYCON_LEFT:
+  case Joypad::TYPE::JOYCON_RIGHT:
   case Joypad::TYPE::NINTENDO:
 #ifdef INPUTTINO_USE_UHID
     if (prefer_uhid) {

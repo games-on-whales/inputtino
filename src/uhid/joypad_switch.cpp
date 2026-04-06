@@ -337,6 +337,11 @@ Result<SwitchJoypad> SwitchJoypad::create(const DeviceDefinition &device) {
   auto joypad = SwitchJoypad(*mac);
   joypad._state->vendor_id = device.vendor_id;
   joypad._state->product_id = device.product_id;
+  if (device.product_id == uhid::JOYCON_PID_LEFT) {
+    joypad._state->controller_type = uhid::JOYCON_CTLR_TYPE_JCL;
+  } else if (device.product_id == uhid::JOYCON_PID_RIGHT) {
+    joypad._state->controller_type = uhid::JOYCON_CTLR_TYPE_JCR;
+  }
 
   auto def = uhid::DeviceDefinition{
       .name = device.name,
@@ -373,6 +378,10 @@ Result<SwitchJoypad> SwitchJoypad::create(const DeviceDefinition &device) {
 }
 std::string SwitchJoypad::get_mac_address() const {
   return _state->mac.to_string();
+}
+
+uint16_t SwitchJoypad::get_product_id() const {
+  return _state->product_id;
 }
 
 std::vector<std::string> SwitchJoypad::get_sys_nodes() const {
@@ -476,9 +485,11 @@ static void apply_switch_imu(SwitchJoypadState &state, bool is_accel, float x, f
   // Remap from SDL coordinate frame to hid-nintendo's native frame.
   //   SDL_X = -kernel_Y,  SDL_Y = kernel_Z,  SDL_Z = -kernel_X
   // Invert:  kernel_X = -SDL_Z,  kernel_Y = -SDL_X,  kernel_Z = SDL_Y
+  // Right Joy-Con: hid-nintendo negates Y/Z, so counter-negate.
+  bool is_right_joycon = state.product_id == uhid::JOYCON_PID_RIGHT;
   float nx = -z;
-  float ny = -x;
-  float nz = y;
+  float ny = is_right_joycon ? x : -x;
+  float nz = is_right_joycon ? -y : y;
 
   int16_t sx = 0;
   int16_t sy = 0;
