@@ -760,6 +760,100 @@ TEST_CASE("Switch right stick evdev round-trip all directions", "[UHID],[Switch]
   }
 }
 
+TEST_CASE("Joy-Con Left creation and identity", "[UHID],[Switch],[JoyCon]") {
+  DeviceDefinition def = {
+      .name = "Joy-Con (L)",
+      .vendor_id = 0x057E,
+      .product_id = 0x2006,
+      .version = 0x8111,
+  };
+  auto joypad = std::move(*SwitchJoypad::create(def));
+  std::this_thread::sleep_for(150ms);
+
+  REQUIRE(joypad.get_product_id() == 0x2006);
+
+  auto hidraw = wait_for_hidraw_by_uniq(joypad.get_mac_address(), def.vendor_id, def.product_id);
+  REQUIRE_FALSE(hidraw.empty());
+  REQUIRE(std::filesystem::exists(hidraw));
+
+  auto report = read_hidraw_report(hidraw);
+  REQUIRE(report[0] == uhid::SWITCH_INPUT_REPORT_STANDARD_FULL);
+}
+
+TEST_CASE("Joy-Con Right creation and identity", "[UHID],[Switch],[JoyCon]") {
+  DeviceDefinition def = {
+      .name = "Joy-Con (R)",
+      .vendor_id = 0x057E,
+      .product_id = 0x2007,
+      .version = 0x8111,
+  };
+  auto joypad = std::move(*SwitchJoypad::create(def));
+  std::this_thread::sleep_for(150ms);
+
+  REQUIRE(joypad.get_product_id() == 0x2007);
+
+  auto hidraw = wait_for_hidraw_by_uniq(joypad.get_mac_address(), def.vendor_id, def.product_id);
+  REQUIRE_FALSE(hidraw.empty());
+  REQUIRE(std::filesystem::exists(hidraw));
+
+  auto report = read_hidraw_report(hidraw);
+  REQUIRE(report[0] == uhid::SWITCH_INPUT_REPORT_STANDARD_FULL);
+}
+
+TEST_CASE("Joy-Con sticks and buttons", "[UHID],[Switch],[JoyCon]") {
+  // Joy-Cons use the same HID report format as Pro Controller.
+  // Verify a Joy-Con can send stick and button data correctly.
+  DeviceDefinition def = {
+      .name = "Joy-Con (R)",
+      .vendor_id = 0x057E,
+      .product_id = 0x2007,
+      .version = 0x8111,
+  };
+  auto joypad = std::move(*SwitchJoypad::create(def));
+  std::this_thread::sleep_for(150ms);
+
+  auto hidraw = wait_for_hidraw_by_uniq(joypad.get_mac_address(), def.vendor_id, def.product_id);
+  REQUIRE_FALSE(hidraw.empty());
+
+  // Verify idle state
+  auto idle = read_hidraw_report(hidraw);
+  REQUIRE(report_right_stick(idle) == std::array<uint8_t, 3>{0x00, 0x08, 0x80});
+
+  // Verify right stick movement (Joy-Con R primary stick)
+  joypad.set_stick(Joypad::RS, 32767, 0);
+  REQUIRE_FALSE(wait_for_right_stick(hidraw, {0xFF, 0x0F, 0x80}).empty());
+
+  joypad.set_stick(Joypad::RS, 0, 0);
+  REQUIRE_FALSE(wait_for_right_stick(hidraw, {0x00, 0x08, 0x80}).empty());
+
+  // Verify button press
+  joypad.set_pressed_buttons(Joypad::A);
+  bool saw_button = false;
+  for (int i = 0; i < 10; ++i) {
+    auto report = read_hidraw_report(hidraw, 300ms);
+    if (report_buttons(report) != std::array<uint8_t, 3>{0x00, 0x80, 0x00}) {
+      saw_button = true;
+      break;
+    }
+  }
+  REQUIRE(saw_button);
+}
+
+TEST_CASE("Pro Controller vs Joy-Con product IDs", "[UHID],[Switch],[JoyCon]") {
+  // Verify all three Nintendo controller types create with correct product IDs.
+  auto pro = std::move(
+      *SwitchJoypad::create({.name = "Pro Controller", .vendor_id = 0x057E, .product_id = 0x2009, .version = 0x8111}));
+  REQUIRE(pro.get_product_id() == 0x2009);
+
+  auto jcl = std::move(
+      *SwitchJoypad::create({.name = "Joy-Con (L)", .vendor_id = 0x057E, .product_id = 0x2006, .version = 0x8111}));
+  REQUIRE(jcl.get_product_id() == 0x2006);
+
+  auto jcr = std::move(
+      *SwitchJoypad::create({.name = "Joy-Con (R)", .vendor_id = 0x057E, .product_id = 0x2007, .version = 0x8111}));
+  REQUIRE(jcr.get_product_id() == 0x2007);
+}
+
 TEST_CASE("Bluetooth CRC32", "[PS]") {
   std::string buffer = "123456789";
   auto crc = CRC32(reinterpret_cast<const unsigned char *>(buffer.data()), buffer.length());

@@ -326,7 +326,9 @@ public:
   enum class TYPE {
     XBOX,
     PS,
-    NINTENDO
+    NINTENDO,
+    JOYCON_LEFT,
+    JOYCON_RIGHT
   };
 
   enum CONTROLLER_BTN : unsigned int {
@@ -519,6 +521,7 @@ public:
   std::vector<UdevHwDbEntry> get_udev_hw_db_entries() const override;
 
   std::string get_mac_address() const;
+  uint16_t get_product_id() const;
 
   std::vector<std::string> get_sys_nodes() const;
 
