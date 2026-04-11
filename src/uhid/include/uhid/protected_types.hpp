@@ -18,7 +18,7 @@ struct PS5JoypadState {
    * We also use this information internally to unique match a device with the
    * /dev/input/devXX files; see get_nodes()
    */
-  unsigned char mac_address[6] = {0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF};
+  std::array<unsigned char, 6> mac = {0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF};
   uint16_t vendor_id;
 
   uhid::dualsense_input_report current_state = {};
