@@ -306,20 +306,7 @@ std::vector<std::string> PS5Joypad::get_sys_nodes() const {
 }
 
 std::vector<std::string> PS5Joypad::get_nodes() const {
-  std::vector<std::string> nodes;
-
-  auto sys_nodes = get_sys_nodes();
-  for (const auto dev_entry : sys_nodes) {
-    auto dev_nodes = std::filesystem::directory_iterator{dev_entry};
-    for (auto dev_node : dev_nodes) {
-      if (dev_node.is_directory() && (dev_node.path().filename().string().rfind("event", 0) == 0 ||
-                                      dev_node.path().filename().string().rfind("js", 0) == 0)) {
-        nodes.push_back(("/dev/input/" / dev_node.path().filename()).string());
-      }
-    }
-  }
-
-  return nodes;
+  return uhid::sys_nodes_to_dev_paths(get_sys_nodes());
 }
 
 void PS5Joypad::set_pressed_buttons(unsigned int pressed) {

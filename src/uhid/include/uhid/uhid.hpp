@@ -173,4 +173,26 @@ inline inputtino::Result<Device> Device::create(const DeviceDefinition &definiti
  */
 std::vector<std::string> find_uhid_sys_nodes(uint16_t vendor_id, const inputtino::Mac &mac);
 
+/**
+ * Map sysfs input node paths to /dev/input/ device paths (event*, js*).
+ */
+static std::vector<std::string> sys_nodes_to_dev_paths(const std::vector<std::string> &sys_nodes) {
+  std::vector<std::string> dev_paths;
+  for (const auto &sys_entry : sys_nodes) {
+    if (!std::filesystem::exists(sys_entry)) {
+      continue;
+    }
+    for (const auto &dev_node : std::filesystem::directory_iterator{sys_entry}) {
+      if (!dev_node.is_directory()) {
+        continue;
+      }
+      auto name = dev_node.path().filename().string();
+      if (name.rfind("event", 0) == 0 || name.rfind("js", 0) == 0) {
+        dev_paths.push_back(("/dev/input/" / dev_node.path().filename()).string());
+      }
+    }
+  }
+  return dev_paths;
+}
+
 } // namespace uhid
