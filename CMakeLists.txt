@@ -109,6 +109,7 @@ set(PUBLIC_HEADERS
 
 if (UNIX AND NOT APPLE)
     list(APPEND SRC_LIST
+            "src/mac.cpp"
             "src/uinput/joypad_nintendo.cpp"
             "src/uinput/joypad_xbox.cpp"
             "src/uinput/keyboard.cpp"

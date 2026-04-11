@@ -228,13 +228,16 @@ PS5Joypad::PS5Joypad(uint16_t vendor_id, const Mac &mac)
 }
 
 PS5Joypad::~PS5Joypad() {
-  if (this->_state && this->_state->dev) {
-    this->_state->stop_repeat_thread = true;
-    if (this->_send_input_thread.joinable()) {
-      this->_send_input_thread.join();
+  if (this->_state) {
+    if (this->_state->dev) {
+      this->_state->stop_repeat_thread = true;
+      if (this->_send_input_thread.joinable()) {
+        this->_send_input_thread.join();
+      }
+      this->_state->dev->stop_thread();
+      this->_state->dev.reset();
     }
-    this->_state->dev->stop_thread();
-    this->_state->dev.reset(); // Will trigger ~Device and ultimately destroy the device
+    Mac::release(this->_state->mac);
   }
 }
 

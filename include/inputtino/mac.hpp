@@ -1,51 +1,44 @@
 #pragma once
 
 #include <array>
-#include <functional>
-#include <iomanip>
-#include <random>
-#include <sstream>
+#include <cstdint>
 #include <string>
 
 namespace inputtino {
 
+/**
+ * A 6-byte MAC address for inputtino virtual devices, with a small allocation
+ * pool so each virtual device gets a unique address (the kernel rejects
+ * duplicate MACs). The implementation lives in mac.cpp to keep this public
+ * header free of heavy includes.
+ */
 struct Mac {
   std::array<unsigned char, 6> bytes = {};
 
-  static Mac generate() {
-    auto rand = std::bind(std::uniform_int_distribution<unsigned char>{0, 0xFF},
-                          std::default_random_engine{std::random_device()()});
-    return {{rand(), rand(), rand(), rand(), rand(), rand()}};
-  }
+  /**
+   * Allocate the next free MAC with the inputtino prefix AA:BB:CC:00:xx:xx,
+   * avoiding collisions with both the internal pool and existing UHID devices.
+   * Thread-safe. Call release() when the device is destroyed.
+   */
+  static Mac generate();
 
-  static Mac parse(const std::string &str) {
-    Mac mac;
-    std::stringstream ss(str);
-    for (int i = 0; i < 6; ++i) {
-      unsigned int v = 0;
-      ss >> std::hex >> v;
-      mac.bytes[i] = static_cast<unsigned char>(v);
-      if (i < 5)
-        ss.ignore(1, ':');
-    }
-    return mac;
-  }
+  /** Return a MAC to the pool so it can be reused. */
+  static void release(const Mac &mac);
 
-  std::string to_string() const {
-    std::ostringstream ss;
-    for (int i = 0; i < 6; ++i) {
-      if (i > 0)
-        ss << ':';
-      ss << std::hex << std::setfill('0') << std::setw(2) << static_cast<unsigned int>(bytes[i]);
-    }
-    return ss.str();
-  }
+  /** Parse a "xx:xx:xx:xx:xx:xx" string. */
+  static Mac parse(const std::string &str);
+
+  /** Format as "xx:xx:xx:xx:xx:xx". */
+  std::string to_string() const;
 
   bool matches(const std::string &str) const {
     return bytes == parse(str).bytes;
   }
   bool operator==(const Mac &other) const {
     return bytes == other.bytes;
+  }
+  bool operator!=(const Mac &other) const {
+    return bytes != other.bytes;
   }
 };
 

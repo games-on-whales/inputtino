@@ -468,6 +468,49 @@ TEST_CASE("Bluetooth CRC32", "[PS]") {
   REQUIRE(crc2 == 0x9498b398);
 }
 
+TEST_CASE("Mac struct", "[Mac]") {
+  SECTION("generate returns unique MACs") {
+    auto m1 = Mac::generate();
+    auto m2 = Mac::generate();
+    auto m3 = Mac::generate();
+    REQUIRE(m1 != m2);
+    REQUIRE(m2 != m3);
+    REQUIRE(m1 != m3);
+    // All use the inputtino prefix
+    REQUIRE(m1.bytes[0] == 0xAA);
+    REQUIRE(m1.bytes[1] == 0xBB);
+    REQUIRE(m1.bytes[2] == 0xCC);
+    REQUIRE(m1.bytes[3] == 0x00);
+    Mac::release(m1);
+    Mac::release(m2);
+    Mac::release(m3);
+  }
+
+  SECTION("release allows reuse") {
+    auto m1 = Mac::generate();
+    auto m1_copy = m1;
+    Mac::release(m1);
+    auto m2 = Mac::generate();
+    REQUIRE(m2 == m1_copy);
+    Mac::release(m2);
+  }
+
+  SECTION("parse and to_string round-trip") {
+    auto m = Mac::parse("AB:CD:EF:01:23:45");
+    REQUIRE(m.to_string() == "ab:cd:ef:01:23:45");
+    REQUIRE(m.bytes[0] == 0xAB);
+    REQUIRE(m.bytes[5] == 0x45);
+  }
+
+  SECTION("matches is case-insensitive") {
+    auto m = Mac::parse("aa:bb:cc:dd:ee:ff");
+    REQUIRE(m.matches("AA:BB:CC:DD:EE:FF"));
+    REQUIRE(m.matches("aa:bb:cc:dd:ee:ff"));
+    REQUIRE(m.matches("Aa:Bb:Cc:Dd:Ee:Ff"));
+    REQUIRE_FALSE(m.matches("00:00:00:00:00:00"));
+  }
+}
+
 TEST_CASE("Test MAC address", "[PS]") {
   DeviceDefinition def = {.name = "Wolf DualSense (virtual) pad",
                           .vendor_id = 0x054C,
