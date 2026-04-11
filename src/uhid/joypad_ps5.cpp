@@ -94,7 +94,7 @@ static void on_uhid_event(std::shared_ptr<PS5JoypadState> state, uhid_event ev, 
                 &answer.u.get_report_reply.data[0]);
 
       // Copy MAC address data
-      std::reverse_copy(state->mac.begin(), state->mac.end(),
+      std::reverse_copy(state->mac.bytes.begin(), state->mac.bytes.end(),
                         &answer.u.get_report_reply.data[1]);
 
       answer.u.get_report_reply.size = sizeof(uhid::ps5_pairing_info);
@@ -215,7 +215,7 @@ static void on_uhid_event(std::shared_ptr<PS5JoypadState> state, uhid_event ev, 
   }
 }
 
-PS5Joypad::PS5Joypad(uint16_t vendor_id, std::array<unsigned char, 6> mac)
+PS5Joypad::PS5Joypad(uint16_t vendor_id, const Mac &mac)
     : _state(std::make_shared<PS5JoypadState>()) {
   this->_state->mac = mac;
   this->_state->vendor_id = vendor_id;
@@ -257,10 +257,8 @@ Result<PS5Joypad> PS5Joypad::create(const DeviceDefinition &device) {
     def.report_description = {&uhid::ps5_rdesc[0], &uhid::ps5_rdesc[0] + sizeof(uhid::ps5_rdesc)};
   }
 
-  auto mac_address = def.uniq.empty()
-      ? uhid::generate_mac_address()
-      : uhid::mac_from_string(def.uniq);
-  auto joypad = PS5Joypad(device.vendor_id, mac_address);
+  auto mac = def.uniq.empty() ? Mac::generate() : Mac::parse(def.uniq);
+  auto joypad = PS5Joypad(device.vendor_id, mac);
 
   if (def.phys.empty()) {
     def.phys = "INPUTTINO_BT_LINK";
@@ -295,7 +293,7 @@ static int scale_value(int input, int input_start, int input_end, int output_sta
 }
 
 std::string PS5Joypad::get_mac_address() const {
-  return uhid::mac_to_string(_state->mac);
+  return _state->mac.to_string();
 }
 
 std::vector<std::string> PS5Joypad::get_sys_nodes() const {

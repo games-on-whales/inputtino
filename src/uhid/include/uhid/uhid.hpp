@@ -7,8 +7,8 @@
 #include <fstream>
 #include <functional>
 #include <iomanip>
+#include <inputtino/mac.hpp>
 #include <inputtino/result.hpp>
-#include <random>
 #include <iostream>
 #include <linux/uhid.h>
 #include <memory>
@@ -170,44 +170,11 @@ inputtino::Result<Device> Device::create(const DeviceDefinition &definition,
   }
 }
 
-static std::array<unsigned char, 6> generate_mac_address() {
-  auto rand = std::bind(std::uniform_int_distribution<unsigned char>{0, 0xFF},
-                        std::default_random_engine{std::random_device()()});
-  return {rand(), rand(), rand(), rand(), rand(), rand()};
-}
-
-static std::string mac_to_string(const std::array<unsigned char, 6> &mac) {
-  std::ostringstream ss;
-  for (int i = 0; i < 6; ++i) {
-    if (i > 0) ss << ':';
-    ss << std::hex << std::setfill('0') << std::setw(2) << static_cast<unsigned int>(mac[i]);
-  }
-  return ss.str();
-}
-
-static std::array<unsigned char, 6> mac_from_string(const std::string &str) {
-  std::array<unsigned char, 6> mac = {};
-  std::stringstream ss(str);
-  for (int i = 0; i < 6; ++i) {
-    unsigned int v = 0;
-    ss >> std::hex >> v;
-    mac[i] = static_cast<unsigned char>(v);
-    if (i < 5) ss.ignore(1, ':');
-  }
-  return mac;
-}
-
-/// Case-insensitive MAC string comparison against raw bytes.
-static bool mac_equals(const std::array<unsigned char, 6> &mac, const std::string &str) {
-  return mac == mac_from_string(str);
-}
-
 /**
  * Find sysfs input nodes for a UHID device by vendor ID and MAC.
  * Shared by SwitchJoypad and PS5Joypad.
  */
-static std::vector<std::string> find_uhid_sys_nodes(uint16_t vendor_id,
-                                                     const std::array<unsigned char, 6> &mac) {
+static std::vector<std::string> find_uhid_sys_nodes(uint16_t vendor_id, const inputtino::Mac &mac) {
   const std::string base_path = "/sys/devices/virtual/misc/uhid";
   std::vector<std::string> nodes;
   if (!std::filesystem::exists(base_path)) {
@@ -240,7 +207,7 @@ static std::vector<std::string> find_uhid_sys_nodes(uint16_t vendor_id,
       std::ifstream uniq_file{uniq_path};
       std::string uniq_value;
       std::getline(uniq_file, uniq_value);
-      if (mac_equals(mac, uniq_value)) {
+      if (mac.matches(uniq_value)) {
         nodes.push_back(dev_entry.path().string());
       }
     }
