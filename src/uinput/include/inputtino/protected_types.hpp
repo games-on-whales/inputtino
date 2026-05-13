@@ -61,6 +61,7 @@ struct KeyboardState {
 struct MouseState {
   libevdev_uinput_ptr mouse_rel = nullptr;
   libevdev_uinput_ptr mouse_abs = nullptr;
+  bool absolute = false;
 };
 
 struct TouchScreenState {

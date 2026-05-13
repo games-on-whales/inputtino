@@ -166,6 +166,33 @@ TEST_CASE("virtual mouse absolue", "[LIBINPUT]") {
       REQUIRE_THAT(libinput_event_pointer_get_absolute_x_transformed(p_event, TARGET_WIDTH),
                    WithinRel(TARGET_WIDTH, 0.001f));
     }
+
+    {
+        mouse.press(Mouse::RIGHT);
+        event = get_event(li);
+        REQUIRE(libinput_event_get_type(event.get()) == LIBINPUT_EVENT_POINTER_BUTTON);
+        auto p_event = libinput_event_get_pointer_event(event.get());
+        REQUIRE(libinput_event_pointer_get_button(p_event) == BTN_RIGHT);
+        REQUIRE(libinput_event_pointer_get_button_state(p_event) == LIBINPUT_BUTTON_STATE_PRESSED);
+    }
+
+    {
+        mouse.release(Mouse::RIGHT);
+        event = get_event(li);
+        REQUIRE(libinput_event_get_type(event.get()) == LIBINPUT_EVENT_POINTER_BUTTON);
+        auto p_event = libinput_event_get_pointer_event(event.get());
+        REQUIRE(libinput_event_pointer_get_button(p_event) == BTN_RIGHT);
+        REQUIRE(libinput_event_pointer_get_button_state(p_event) == LIBINPUT_BUTTON_STATE_RELEASED);
+    }
+
+    {
+        mouse.vertical_scroll(121);
+        event = get_event(li);
+        REQUIRE(libinput_event_get_type(event.get()) == LIBINPUT_EVENT_POINTER_SCROLL_WHEEL);
+        auto p_event = libinput_event_get_pointer_event(event.get());
+        REQUIRE(libinput_event_pointer_get_scroll_value_v120(p_event, LIBINPUT_POINTER_AXIS_SCROLL_VERTICAL) == -121);
+        event = get_event(li); // skipping LIBINPUT_EVENT_POINTER_AXIS
+    }
 }
 
 TEST_CASE("virtual touch screen", "[LIBINPUT]") {
