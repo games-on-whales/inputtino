@@ -166,6 +166,65 @@ TEST_CASE("virtual mouse absolue", "[LIBINPUT]") {
       REQUIRE_THAT(libinput_event_pointer_get_absolute_x_transformed(p_event, TARGET_WIDTH),
                    WithinRel(TARGET_WIDTH, 0.001f));
     }
+
+    {
+        mouse.press(Mouse::RIGHT);
+        event = get_event(li);
+        REQUIRE(libinput_event_get_type(event.get()) == LIBINPUT_EVENT_POINTER_BUTTON);
+        auto p_event = libinput_event_get_pointer_event(event.get());
+        REQUIRE(libinput_event_pointer_get_button(p_event) == BTN_RIGHT);
+        REQUIRE(libinput_event_pointer_get_button_state(p_event) == LIBINPUT_BUTTON_STATE_PRESSED);
+    }
+
+    {
+        mouse.release(Mouse::RIGHT);
+        event = get_event(li);
+        REQUIRE(libinput_event_get_type(event.get()) == LIBINPUT_EVENT_POINTER_BUTTON);
+        auto p_event = libinput_event_get_pointer_event(event.get());
+        REQUIRE(libinput_event_pointer_get_button(p_event) == BTN_RIGHT);
+        REQUIRE(libinput_event_pointer_get_button_state(p_event) == LIBINPUT_BUTTON_STATE_RELEASED);
+    }
+
+    {
+        mouse.vertical_scroll(121);
+        event = get_event(li);
+        REQUIRE(libinput_event_get_type(event.get()) == LIBINPUT_EVENT_POINTER_SCROLL_WHEEL);
+        auto p_event = libinput_event_get_pointer_event(event.get());
+        // REL_WHEEL positive is up in evdev; libinput reports vertical scroll with the opposite sign.
+        REQUIRE(libinput_event_pointer_get_scroll_value_v120(p_event, LIBINPUT_POINTER_AXIS_SCROLL_VERTICAL) == -121);
+        event = get_event(li);
+        REQUIRE(libinput_event_get_type(event.get()) == LIBINPUT_EVENT_POINTER_AXIS);
+    }
+}
+
+TEST_CASE("virtual mouse switches back to relative device", "[LIBINPUT]") {
+    auto mouse = std::move(*Mouse::create());
+    auto rel = create_libinput_context({mouse.get_nodes()[0]});
+    auto abs = create_libinput_context({mouse.get_nodes()[1]});
+
+    auto event = get_event(rel);
+    REQUIRE(libinput_event_get_type(event.get()) == LIBINPUT_EVENT_DEVICE_ADDED);
+    event = get_event(abs);
+    REQUIRE(libinput_event_get_type(event.get()) == LIBINPUT_EVENT_DEVICE_ADDED);
+
+    mouse.move_abs(100, 100, 1920, 1080);
+    event = get_event(abs);
+    REQUIRE(libinput_event_get_type(event.get()) == LIBINPUT_EVENT_POINTER_MOTION_ABSOLUTE);
+
+    mouse.move(100, 100);
+    event = get_event(rel);
+    REQUIRE(libinput_event_get_type(event.get()) == LIBINPUT_EVENT_POINTER_MOTION);
+    auto p_event = libinput_event_get_pointer_event(event.get());
+    REQUIRE(libinput_event_pointer_get_dx_unaccelerated(p_event) == 100);
+    REQUIRE(libinput_event_pointer_get_dy_unaccelerated(p_event) == 100);
+
+    mouse.vertical_scroll(121);
+    event = get_event(rel);
+    REQUIRE(libinput_event_get_type(event.get()) == LIBINPUT_EVENT_POINTER_SCROLL_WHEEL);
+    p_event = libinput_event_get_pointer_event(event.get());
+    REQUIRE(libinput_event_pointer_get_scroll_value_v120(p_event, LIBINPUT_POINTER_AXIS_SCROLL_VERTICAL) == -121);
+    event = get_event(rel);
+    REQUIRE(libinput_event_get_type(event.get()) == LIBINPUT_EVENT_POINTER_AXIS);
 }
 
 TEST_CASE("virtual touch screen", "[LIBINPUT]") {
