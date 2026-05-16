@@ -73,7 +73,7 @@ static Result<libevdev_uinput_ptr> create_mouse_abs(const DeviceDefinition &devi
   libevdev_set_id_version(dev, device.version);
   libevdev_set_id_bustype(dev, BUS_USB);
 
-  libevdev_enable_property(dev, INPUT_PROP_DIRECT);
+  libevdev_enable_property(dev, INPUT_PROP_POINTER);
   libevdev_enable_event_type(dev, EV_KEY);
   libevdev_enable_event_code(dev, EV_KEY, BTN_LEFT, nullptr);
   libevdev_enable_event_code(dev, EV_KEY, BTN_RIGHT, nullptr);
