@@ -317,6 +317,22 @@ public:
   virtual void set_triggers(int16_t left, int16_t right) = 0;
 
   virtual void set_stick(STICK_POSITION stick_type, short x, short y) = 0;
+
+  /**
+   * Tears down and re-creates the underlying virtual device in place, keeping
+   * this object (and its registered callbacks, such as rumble) alive.
+   *
+   * Destroying the old device issues UI_DEV_DESTROY, which invalidates any file
+   * descriptor that another process still holds open against the old
+   * /dev/input node (for example a container that opened it directly). A fresh
+   * device with a new major:minor is created in its place, so input can be
+   * routed to a single consumer again instead of leaking to every process that
+   * ever opened the node.
+   *
+   * The default implementation is a no-op; device types that support being
+   * re-plugged across containers override this.
+   */
+  virtual void recreate_device() {}
 };
 
 class XboxOneJoypad : public Joypad {
@@ -339,6 +355,7 @@ public:
   void set_triggers(int16_t left, int16_t right) override;
   void set_stick(STICK_POSITION stick_type, short x, short y) override;
   void set_on_rumble(const std::function<void(int low_freq, int high_freq)> &callback);
+  void recreate_device() override;
 
 protected:
   typedef struct XboxOneJoypadState XboxOneJoypadState;
@@ -367,6 +384,7 @@ public:
   void set_triggers(int16_t left, int16_t right) override;
   void set_stick(STICK_POSITION stick_type, short x, short y) override;
   void set_on_rumble(const std::function<void(int low_freq, int high_freq)> &callback);
+  void recreate_device() override;
 
 protected:
   typedef struct XboxOneJoypadState SwitchJoypadState;
@@ -383,6 +401,9 @@ public:
              .name = "Wolf DualSense (virtual) pad", .vendor_id = 0x054C, .product_id = 0x0CE6, .version = 0x8111});
   PS5Joypad(PS5Joypad &&j) noexcept : _state(nullptr) {
     std::swap(j._state, _state);
+    // The report pump is joinable (not detached) so recreate_device()/the destructor can wait for it; it must
+    // travel with the state it writes to, otherwise the moved-from object would terminate() on a joinable thread.
+    std::swap(j._send_input_thread, _send_input_thread);
   }
   ~PS5Joypad() override;
 
@@ -396,6 +417,7 @@ public:
   void set_triggers(int16_t left, int16_t right) override;
   void set_stick(STICK_POSITION stick_type, short x, short y) override;
   void set_on_rumble(const std::function<void(int low_freq, int high_freq)> &callback);
+  void recreate_device() override;
 
   static constexpr int touchpad_width = 1920;
   static constexpr int touchpad_height = 1080;

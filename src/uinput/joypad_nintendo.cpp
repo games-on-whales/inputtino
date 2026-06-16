@@ -98,12 +98,39 @@ Result<SwitchJoypad> SwitchJoypad::create(const DeviceDefinition &device) {
 
   SwitchJoypad joypad;
   joypad._state->joy = std::move(*joy_el);
+  joypad._state->definition = device;
 
-  auto event_thread = std::thread(event_listener, joypad._state);
+  auto event_thread = std::thread(event_listener, joypad._state, joypad._state->device_generation);
   joypad._state->events_thread = std::move(event_thread);
   joypad._state->events_thread.detach();
 
   return joypad;
+}
+
+void SwitchJoypad::recreate_device() {
+  if (!_state) {
+    return;
+  }
+
+  // Build the replacement device first; if this fails we keep the existing one
+  // rather than ending up with no device at all.
+  auto new_joy = create_nintendo_controller(_state->definition);
+  if (!new_joy) {
+    std::cerr << "Unable to recreate Nintendo joypad device: " << new_joy.getErrorMessage() << std::endl;
+    return;
+  }
+
+  // Bump the generation so the listener tied to the old device stops on its own.
+  auto generation = ++_state->device_generation;
+
+  // Replacing the managed pointer destroys the previous uinput device (UI_DEV_DESTROY). Any fd still held open
+  // against the old node, e.g. in another container, is invalidated, so input can no longer leak there.
+  _state->joy = std::move(*new_joy);
+
+  // Start a fresh listener for the new device. on_rumble and the rest of the state are preserved, so feedback
+  // keeps working without re-wiring.
+  _state->events_thread = std::thread(event_listener, _state, generation);
+  _state->events_thread.detach();
 }
 
 void SwitchJoypad::set_pressed_buttons(unsigned int newly_pressed) {
