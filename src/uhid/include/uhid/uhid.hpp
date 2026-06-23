@@ -4,6 +4,7 @@
 #include <fcntl.h>
 #include <functional>
 #include <inputtino/result.hpp>
+#include <iomanip>
 #include <iostream>
 #include <linux/uhid.h>
 #include <memory>
@@ -51,7 +52,7 @@ static inputtino::Result<bool> uhid_write(int fd, const struct uhid_event *ev) {
 class Device {
 private:
   Device(std::shared_ptr<std::thread> ev_thread, std::shared_ptr<ThreadState> state)
-      : ev_thread(std::move(ev_thread)), state(std::move(state)) {};
+      : ev_thread(std::move(ev_thread)), state(std::move(state)){};
   std::shared_ptr<std::thread> ev_thread;
   std::shared_ptr<ThreadState> state;
   std::shared_ptr<std::function<void(const uhid_event &ev, int fd)>> on_event;
@@ -82,7 +83,7 @@ public:
 
   ~Device() {
     if (state) {
-      struct uhid_event ev{};
+      struct uhid_event ev {};
       ev.type = UHID_DESTROY;
       uhid_write(state->fd, &ev);
 
@@ -103,8 +104,10 @@ static void set_c_str(const std::string &str, unsigned char *c_str) {
 
 constexpr int UHID_POLL_TIMEOUT = 500; // ms
 
-inputtino::Result<Device> Device::create(const DeviceDefinition &definition,
-                                         const std::function<void(const uhid_event &ev, int fd)> &on_event) {
+// Keep this definition inline because the shared UHID helper is included by
+// multiple controller backends.
+inline inputtino::Result<Device> Device::create(const DeviceDefinition &definition,
+                                                 const std::function<void(const uhid_event &ev, int fd)> &on_event) {
 
   int fd = open("/dev/uhid", O_RDWR | O_CLOEXEC);
   if (fd < 0) {
@@ -141,7 +144,7 @@ inputtino::Result<Device> Device::create(const DeviceDefinition &definition,
           break;
         }
         if (pfds[0].revents & POLLIN) {
-          struct uhid_event ev{};
+          struct uhid_event ev {};
           auto ret = read(state->fd, &ev, sizeof(ev));
           if (ret == 0) {
             std::cerr << "Read HUP on uhid-cdev" << std::endl;
