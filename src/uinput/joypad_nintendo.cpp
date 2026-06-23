@@ -21,7 +21,15 @@ std::vector<std::string> SwitchJoypad::get_nodes() const {
   return nodes;
 }
 
-Result<libevdev_uinput_ptr> create_nintendo_controller(const DeviceDefinition &device) {
+std::vector<Joypad::UdevEvent> SwitchJoypad::get_udev_events() const {
+  return gen_joystick_udev_events(_state);
+}
+
+std::vector<Joypad::UdevHwDbEntry> SwitchJoypad::get_udev_hw_db_entries() const {
+  return gen_joystick_udev_hw_db(_state);
+}
+
+static Result<libevdev_uinput_ptr> create_nintendo_controller(const DeviceDefinition &device) {
   libevdev *dev = libevdev_new();
   libevdev_uinput *uidev;
 
@@ -99,8 +107,7 @@ Result<SwitchJoypad> SwitchJoypad::create(const DeviceDefinition &device) {
   SwitchJoypad joypad;
   joypad._state->joy = std::move(*joy_el);
 
-  auto event_thread = std::thread(event_listener, joypad._state);
-  joypad._state->events_thread = std::move(event_thread);
+  joypad._state->events_thread = std::thread(event_listener, joypad._state);
   joypad._state->events_thread.detach();
 
   return joypad;
@@ -187,4 +194,8 @@ void SwitchJoypad::set_triggers(int16_t left, int16_t right) {
 void SwitchJoypad::set_on_rumble(const std::function<void(int, int)> &callback) {
   this->_state->on_rumble = callback;
 }
+
+// Motion isn't available on the plain uinput backend; the Joypad base provides a
+// no-op set_gyro()/set_accel() and supports_motion() stays false.
+
 } // namespace inputtino

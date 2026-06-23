@@ -2,12 +2,17 @@
 #include <functional>
 #include <inputtino/input.hpp>
 #include <optional>
+#include <uhid/joypad_common.hpp>
 #include <uhid/ps5.hpp>
 #include <uhid/uhid.hpp>
 
 namespace inputtino {
-struct PS5JoypadState {
-  std::shared_ptr<uhid::Device> dev;
+// dev / def / mtx / stop_repeat_thread live in uhid_joypad::CommonState, shared
+// with PS5JoypadState below and driven by the helpers in uhid/joypad_common.hpp.
+
+struct PS5JoypadState : uhid_joypad::CommonState {
+  // MAC allocated from the pooled Mac type (switch-pro-controller work);
+  // dev_paths derive from this so the /dev/input/* layout stays stable.
   Mac mac;
   uint16_t vendor_id;
 
@@ -20,7 +25,6 @@ struct PS5JoypadState {
   uint32_t last_left_trigger_event = 0;
   uint32_t last_right_trigger_event = 0;
 
-  bool stop_repeat_thread = false;
   bool is_bluetooth = true;
 };
 } // namespace inputtino

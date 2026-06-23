@@ -45,7 +45,9 @@ struct BaseJoypadState {
   bool stop_listening_events = false;
   std::thread events_thread;
 
+
   std::optional<std::function<void(int low_freq, int high_freq)>> on_rumble = std::nullopt;
+
 };
 
 struct XboxOneJoypadState : BaseJoypadState {};
