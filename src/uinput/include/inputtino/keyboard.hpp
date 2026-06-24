@@ -79,6 +79,9 @@ static const std::map<short, KEY_MAP> key_mappings = {
     {0xC0, {KEY_GRAVE, 0x70035}},      {0xDB, {KEY_LEFTBRACE, 0x7002F}},
     {0xDC, {KEY_BACKSLASH, 0x70031}},  {0xDD, {KEY_RIGHTBRACE, 0x70030}},
     {0xDE, {KEY_APOSTROPHE, 0x70034}}, {0xE2, {KEY_102ND, 0x70064}},
+    // Sunshine extension keycodes (0x100+ range, sent with SS_KBE_FLAG_NON_NORMALIZED)
+    {0x100, {KEY_UNDO, 0x7007A}},    {0x101, {KEY_CUT, 0x7007B}},
+    {0x102, {KEY_COPY, 0x7007C}},    {0x103, {KEY_PASTE, 0x7007D}},
 };
 
 } // namespace wolf::core::input::keyboard
