@@ -98,10 +98,16 @@ void TouchScreen::place_finger(int finger_nr, float x, float y, float pressure, 
 
     if (_state->fingers.find(finger_nr) == _state->fingers.end()) {
       // Wow, a wild finger appeared!
-      auto finger_slot = _state->fingers.size() + 1;
+      // Pick the lowest free slot: fingers.size() + 1 would collide with a slot that's
+      // still in use after another finger has been released (ex: two fingers down,
+      // first one lifted and placed again)
+      auto finger_slot = first_free_mt_slot(_state->fingers);
+      auto tracking_id = _state->next_tracking_id;
+      _state->next_tracking_id = (_state->next_tracking_id + 1) % 65536;
       _state->fingers[finger_nr] = finger_slot;
       libevdev_uinput_write_event(ts, EV_ABS, ABS_MT_SLOT, finger_slot);
-      libevdev_uinput_write_event(ts, EV_ABS, ABS_MT_TRACKING_ID, finger_slot);
+      _state->current_slot = finger_slot;
+      libevdev_uinput_write_event(ts, EV_ABS, ABS_MT_TRACKING_ID, tracking_id);
     } else {
       // I already know this finger, let's check the slot
       auto finger_slot = _state->fingers[finger_nr];
@@ -125,12 +131,17 @@ void TouchScreen::place_finger(int finger_nr, float x, float y, float pressure, 
 
 void TouchScreen::release_finger(int finger_nr) {
   if (auto ts = this->_state->touch_screen.get()) {
-    auto finger_slot = _state->fingers[finger_nr];
+    auto finger = _state->fingers.find(finger_nr);
+    if (finger == _state->fingers.end()) {
+      // Unknown finger, releasing it would corrupt the state of another slot
+      return;
+    }
+    auto finger_slot = finger->second;
     if (_state->current_slot != finger_slot) {
       libevdev_uinput_write_event(ts, EV_ABS, ABS_MT_SLOT, finger_slot);
-      _state->current_slot = -1;
+      _state->current_slot = finger_slot;
     }
-    _state->fingers.erase(finger_nr);
+    _state->fingers.erase(finger);
     libevdev_uinput_write_event(ts, EV_ABS, ABS_MT_TRACKING_ID, -1);
 
     libevdev_uinput_write_event(ts, EV_SYN, SYN_REPORT, 0);

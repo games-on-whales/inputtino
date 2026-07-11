@@ -72,7 +72,8 @@ struct TouchScreenState {
    * Slots are numbered starting from 0 up to <number of currently connected fingers> (max: 4)
    *
    * The way it works:
-   * - first time a new finger_id arrives we'll create a new slot and call MT_TRACKING_ID = slot_number
+   * - first time a new finger_id arrives we'll assign it the lowest free slot
+   *   and call MT_TRACKING_ID = <a monotonically increasing contact id>
    * - we can keep updating ABS_X and ABS_Y as long as the finger_id stays the same
    * - if we want to update a different finger we'll have to call ABS_MT_SLOT = slot_number
    * - when a finger is released we'll call ABS_MT_SLOT = slot_number && MT_TRACKING_ID = -1
@@ -82,6 +83,8 @@ struct TouchScreenState {
    */
   /* The MT_SLOT we are currently updating */
   int current_slot = -1;
+  /* The MT_TRACKING_ID to assign to the next new contact */
+  int next_tracking_id = 0;
   /* A map of finger_id to MT_SLOT */
   std::map<int /* finger_id */, int /* MT_SLOT */> fingers;
 };
@@ -94,7 +97,8 @@ struct TrackpadState {
    * Slots are numbered starting from 0 up to <number of currently connected fingers> (max: 4)
    *
    * The way it works:
-   * - first time a new finger_id arrives we'll create a new slot and call MT_TRACKING_ID = slot_number
+   * - first time a new finger_id arrives we'll assign it the lowest free slot
+   *   and call MT_TRACKING_ID = <a monotonically increasing contact id>
    * - we can keep updating ABS_X and ABS_Y as long as the finger_id stays the same
    * - if we want to update a different finger we'll have to call ABS_MT_SLOT = slot_number
    * - when a finger is released we'll call ABS_MT_SLOT = slot_number && MT_TRACKING_ID = -1
@@ -104,8 +108,27 @@ struct TrackpadState {
    */
   /* The MT_SLOT we are currently updating */
   int current_slot = -1;
+  /* The MT_TRACKING_ID to assign to the next new contact */
+  int next_tracking_id = 0;
   /* A map of finger_id to MT_SLOT */
   std::map<int /* finger_id */, int /* MT_SLOT */> fingers;
 };
+
+/* Returns the lowest MT slot not currently assigned to any finger */
+static inline int first_free_mt_slot(const std::map<int, int> &fingers) {
+  int slot = 0;
+  auto is_taken = [&fingers](int candidate) {
+    for (const auto &finger : fingers) {
+      if (finger.second == candidate) {
+        return true;
+      }
+    }
+    return false;
+  };
+  while (is_taken(slot)) {
+    slot++;
+  }
+  return slot;
+}
 
 } // namespace inputtino
