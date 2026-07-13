@@ -8,6 +8,7 @@
 #include <vector>
 
 using namespace inputtino;
+using Catch::Matchers::WithinAbs;
 using Catch::Matchers::WithinRel;
 using namespace std::chrono_literals;
 
@@ -384,8 +385,8 @@ TEST_CASE("virtual pen tablet", "[LIBINPUT]") {
         REQUIRE(libinput_event_tablet_tool_get_proximity_state(t_event) == LIBINPUT_TABLET_TOOL_PROXIMITY_STATE_IN);
         REQUIRE(libinput_tablet_tool_get_type(libinput_event_tablet_tool_get_tool(t_event)) ==
                 LIBINPUT_TABLET_TOOL_TYPE_PEN);
-        REQUIRE(libinput_event_tablet_tool_get_distance(t_event) == 0.5);
-        REQUIRE(libinput_event_tablet_tool_get_pressure(t_event) == 0.0);
+        REQUIRE_THAT(libinput_event_tablet_tool_get_distance(t_event), WithinAbs(0.5, 0.01));
+        REQUIRE_THAT(libinput_event_tablet_tool_get_pressure(t_event), WithinAbs(0.0, 0.01));
         REQUIRE_THAT(libinput_event_tablet_tool_get_x_transformed(t_event, TARGET_W), WithinRel(TARGET_W * 0.1f, 0.5f));
         REQUIRE_THAT(libinput_event_tablet_tool_get_y_transformed(t_event, TARGET_H), WithinRel(TARGET_H * 0.2f, 0.5f));
         REQUIRE_THAT(libinput_event_tablet_tool_get_tilt_x(t_event), WithinRel(45, 0.1f));
@@ -419,8 +420,8 @@ TEST_CASE("virtual pen tablet", "[LIBINPUT]") {
       REQUIRE(libinput_event_tablet_tool_get_proximity_state(t_event) == LIBINPUT_TABLET_TOOL_PROXIMITY_STATE_IN);
       REQUIRE(libinput_tablet_tool_get_type(libinput_event_tablet_tool_get_tool(t_event)) ==
               LIBINPUT_TABLET_TOOL_TYPE_PEN);
-      REQUIRE(libinput_event_tablet_tool_get_distance(t_event) == 1.0);
-      REQUIRE(libinput_event_tablet_tool_get_pressure(t_event) == 0.0);
+      REQUIRE_THAT(libinput_event_tablet_tool_get_distance(t_event), WithinAbs(1.0, 0.01));
+      REQUIRE_THAT(libinput_event_tablet_tool_get_pressure(t_event), WithinAbs(0.0, 0.01));
       REQUIRE(libinput_event_tablet_tool_get_tip_state(t_event) == LIBINPUT_TABLET_TOOL_TIP_UP);
     }
 
