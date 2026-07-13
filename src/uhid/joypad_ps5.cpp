@@ -286,19 +286,59 @@ Result<PS5Joypad> PS5Joypad::create(const DeviceDefinition &device) {
   if (dev) {
     joypad._state->is_bluetooth = use_bluetooth;
     joypad._state->dev = std::make_shared<uhid::Device>(std::move(*dev));
+    // Stash the (fully resolved) definition so the device can be re-created in place later.
+    joypad._state->def = def;
 
-    // Readers will expect frequent events event if the state hasn't changed
+    // Readers will expect frequent events event if the state hasn't changed.
+    // The thread is kept joinable (see the move constructor) so it can be stopped cleanly before the device it
+    // writes to is destroyed, both on teardown and in recreate_device().
     joypad._send_input_thread = std::thread([state = joypad._state]() {
       while (!state->stop_repeat_thread) {
         send_report(*state);
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
       }
     });
-    joypad._send_input_thread.detach();
 
     return joypad;
   }
   return Error(dev.getErrorMessage());
+}
+
+void PS5Joypad::recreate_device() {
+  if (!_state || !_state->dev) {
+    return;
+  }
+
+  // Stop the report pump first and wait for it to finish: send_report() writes to _state->dev, so it must not be
+  // running while we tear the device down.
+  _state->stop_repeat_thread = true;
+  if (_send_input_thread.joinable()) {
+    _send_input_thread.join();
+  }
+
+  // Destroy the old device (UHID_DESTROY + close). This invalidates any fd another container still holds open
+  // against the old node, so input can no longer leak there. stop_thread() also joins the device's own event
+  // listener before we drop it.
+  _state->dev->stop_thread();
+  _state->dev.reset();
+
+  // Re-create an identical device (same MAC/uniq via the stashed definition) so node matching stays stable, then
+  // re-arm the report pump. The callbacks (rumble/LED/trigger) and current_state live in _state and are preserved.
+  auto dev =
+      uhid::Device::create(_state->def, [state = _state](uhid_event ev, int fd) { on_uhid_event(state, ev, fd); });
+  if (!dev) {
+    fprintf(stderr, "Unable to recreate PS5 joypad device: %s\n", dev.getErrorMessage().c_str());
+    return;
+  }
+  _state->dev = std::make_shared<uhid::Device>(std::move(*dev));
+
+  _state->stop_repeat_thread = false;
+  _send_input_thread = std::thread([state = _state]() {
+    while (!state->stop_repeat_thread) {
+      send_report(*state);
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+  });
 }
 
 static int scale_value(int input, int input_start, int input_end, int output_start, int output_end) {

@@ -147,7 +147,7 @@ static ActiveRumbleEffect create_rumble_effect(const ff_effect &effect) {
  *      where the value is the request ID
  *   You can test the virtual devices that we create by simply using the utility `fftest`
  */
-static void event_listener(const std::shared_ptr<BaseJoypadState> &state) {
+static void event_listener(const std::shared_ptr<BaseJoypadState> &state, unsigned long generation) {
   std::this_thread::sleep_for(100ms); // We have to sleep in order to be able to read from the newly created device
 
   auto uinput_fd = libevdev_uinput_get_fd(state->joy.get());
@@ -170,7 +170,10 @@ static void event_listener(const std::shared_ptr<BaseJoypadState> &state) {
   std::array<pollfd, 1> pfds = {pollfd{.fd = uinput_fd, .events = POLLIN}};
   int poll_rs = 0;
 
-  while (!state->stop_listening_events) {
+  // Keep listening until either the joypad is being torn down (stop_listening_events) or the device we were
+  // started for has been swapped out from under us by recreate_device() (generation bumped); in the latter case
+  // our fd is now invalid and a new listener is already running against the replacement device.
+  while (!state->stop_listening_events && state->device_generation == generation) {
     poll_rs = poll(pfds.data(), pfds.size(), RUMBLE_POLL_TIMEOUT);
     if (poll_rs < 0) {
       std::cerr << "Failed polling uinput fd; ret=" << strerror(errno);

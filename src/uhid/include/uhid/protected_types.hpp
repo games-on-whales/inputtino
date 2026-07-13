@@ -8,6 +8,12 @@
 namespace inputtino {
 struct PS5JoypadState {
   std::shared_ptr<uhid::Device> dev;
+
+  /**
+   * The uhid definition used to create dev. Kept so recreate_device() can tear the device down and build an
+   * identical one (same MAC/uniq, so get_sys_nodes() still matches) without losing the joypad's other state.
+   */
+  uhid::DeviceDefinition def = {};
   /**
    * This will be the MAC address of the device
    *

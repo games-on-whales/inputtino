@@ -45,7 +45,21 @@ struct BaseJoypadState {
   bool stop_listening_events = false;
   std::thread events_thread;
 
+  /**
+   * Bumped every time the underlying device is (re)created. The rumble listener thread captures the value it was
+   * started with and exits once it changes, so a stale listener bound to a destroyed device stops on its own
+   * when recreate_device() swaps in a replacement.
+   */
+  unsigned long device_generation = 0;
+
   std::optional<std::function<void(int low_freq, int high_freq)>> on_rumble = std::nullopt;
+
+  /**
+   * The definition used to create the underlying uinput device.
+   * Kept so the device can be torn down and re-created in place (see
+   * recreate_device()) without losing the registered callbacks.
+   */
+  DeviceDefinition definition = {};
 };
 
 struct XboxOneJoypadState : BaseJoypadState {};
