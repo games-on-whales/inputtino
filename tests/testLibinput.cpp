@@ -241,7 +241,7 @@ TEST_CASE("virtual touch screen", "[LIBINPUT]") {
         event = get_event(li);
         REQUIRE(libinput_event_get_type(event.get()) == LIBINPUT_EVENT_TOUCH_DOWN);
         auto t_event = libinput_event_get_touch_event(event.get());
-        REQUIRE(libinput_event_touch_get_slot(t_event) == 1);
+        REQUIRE(libinput_event_touch_get_slot(t_event) == 0);
         REQUIRE_THAT(libinput_event_touch_get_x_transformed(t_event, TARGET_WIDTH),
                      WithinRel(TARGET_WIDTH * 0.1f, 0.5f));
         REQUIRE_THAT(libinput_event_touch_get_y_transformed(t_event, TARGET_HEIGHT),
@@ -255,7 +255,7 @@ TEST_CASE("virtual touch screen", "[LIBINPUT]") {
         event = get_event(li);
         REQUIRE(libinput_event_get_type(event.get()) == LIBINPUT_EVENT_TOUCH_DOWN);
         auto t_event = libinput_event_get_touch_event(event.get());
-        REQUIRE(libinput_event_touch_get_slot(t_event) == 2);
+        REQUIRE(libinput_event_touch_get_slot(t_event) == 1);
         REQUIRE_THAT(libinput_event_touch_get_x_transformed(t_event, TARGET_WIDTH),
                      WithinRel(TARGET_WIDTH * 0.2f, 0.5f));
         REQUIRE_THAT(libinput_event_touch_get_y_transformed(t_event, TARGET_HEIGHT),
@@ -269,7 +269,46 @@ TEST_CASE("virtual touch screen", "[LIBINPUT]") {
         event = get_event(li);
         REQUIRE(libinput_event_get_type(event.get()) == LIBINPUT_EVENT_TOUCH_UP);
         auto t_event = libinput_event_get_touch_event(event.get());
+        REQUIRE(libinput_event_touch_get_slot(t_event) == 0);
+        event = get_event(li);
+        REQUIRE(libinput_event_get_type(event.get()) == LIBINPUT_EVENT_TOUCH_FRAME);
+    }
+
+    { // Place the first finger again while the second is still down:
+      // it must get its own free slot back, not collide with the second finger's slot
+        touch.place_finger(0, 0.3, 0.3, 0.3, 0);
+        event = get_event(li);
+        REQUIRE(libinput_event_get_type(event.get()) == LIBINPUT_EVENT_TOUCH_DOWN);
+        auto t_event = libinput_event_get_touch_event(event.get());
+        REQUIRE(libinput_event_touch_get_slot(t_event) == 0);
+        REQUIRE_THAT(libinput_event_touch_get_x_transformed(t_event, TARGET_WIDTH),
+                     WithinRel(TARGET_WIDTH * 0.3f, 0.5f));
+        REQUIRE_THAT(libinput_event_touch_get_y_transformed(t_event, TARGET_HEIGHT),
+                     WithinRel(TARGET_HEIGHT * 0.3f, 0.5f));
+        event = get_event(li);
+        REQUIRE(libinput_event_get_type(event.get()) == LIBINPUT_EVENT_TOUCH_FRAME);
+    }
+
+    { // Move the second finger: it must still be tracked in its own slot
+        touch.place_finger(1, 0.25, 0.25, 0.3, 0);
+        event = get_event(li);
+        REQUIRE(libinput_event_get_type(event.get()) == LIBINPUT_EVENT_TOUCH_MOTION);
+        auto t_event = libinput_event_get_touch_event(event.get());
         REQUIRE(libinput_event_touch_get_slot(t_event) == 1);
+        REQUIRE_THAT(libinput_event_touch_get_x_transformed(t_event, TARGET_WIDTH),
+                     WithinRel(TARGET_WIDTH * 0.25f, 0.5f));
+        REQUIRE_THAT(libinput_event_touch_get_y_transformed(t_event, TARGET_HEIGHT),
+                     WithinRel(TARGET_HEIGHT * 0.25f, 0.5f));
+        event = get_event(li);
+        REQUIRE(libinput_event_get_type(event.get()) == LIBINPUT_EVENT_TOUCH_FRAME);
+    }
+
+    { // Lift first finger again
+        touch.release_finger(0);
+        event = get_event(li);
+        REQUIRE(libinput_event_get_type(event.get()) == LIBINPUT_EVENT_TOUCH_UP);
+        auto t_event = libinput_event_get_touch_event(event.get());
+        REQUIRE(libinput_event_touch_get_slot(t_event) == 0);
         event = get_event(li);
         REQUIRE(libinput_event_get_type(event.get()) == LIBINPUT_EVENT_TOUCH_FRAME);
     }
@@ -279,7 +318,7 @@ TEST_CASE("virtual touch screen", "[LIBINPUT]") {
         event = get_event(li);
         REQUIRE(libinput_event_get_type(event.get()) == LIBINPUT_EVENT_TOUCH_UP);
         auto t_event = libinput_event_get_touch_event(event.get());
-        REQUIRE(libinput_event_touch_get_slot(t_event) == 2);
+        REQUIRE(libinput_event_touch_get_slot(t_event) == 1);
         event = get_event(li);
         REQUIRE(libinput_event_get_type(event.get()) == LIBINPUT_EVENT_TOUCH_FRAME);
     }
