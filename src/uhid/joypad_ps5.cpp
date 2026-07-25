@@ -237,7 +237,6 @@ PS5Joypad::~PS5Joypad() {
       this->_state->dev->stop_thread();
       this->_state->dev.reset();
     }
-    Mac::release(this->_state->mac);
   }
 }
 
@@ -261,7 +260,10 @@ Result<PS5Joypad> PS5Joypad::create(const DeviceDefinition &device) {
   }
 
   auto mac = def.uniq.empty() ? Mac::generate() : Mac::parse(def.uniq);
-  auto joypad = PS5Joypad(device.vendor_id, mac);
+  if (!mac) {
+    return Error(mac.getErrorMessage());
+  }
+  auto joypad = PS5Joypad(device.vendor_id, *mac);
 
   if (def.phys.empty()) {
     def.phys = "INPUTTINO_BT_LINK";

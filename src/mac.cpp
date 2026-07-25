@@ -4,7 +4,7 @@
 #include <fstream>
 #include <iomanip>
 #include <mutex>
-#include <set>
+#include <regex>
 #include <sstream>
 
 namespace inputtino {
@@ -16,10 +16,6 @@ namespace {
 Mac from_id(uint16_t id) {
   return {
       {0xAA, 0xBB, 0xCC, 0x00, static_cast<unsigned char>((id >> 8) & 0xFF), static_cast<unsigned char>(id & 0xFF)}};
-}
-
-uint16_t to_id(const Mac &mac) {
-  return (static_cast<uint16_t>(mac.bytes[4]) << 8) | static_cast<uint16_t>(mac.bytes[5]);
 }
 
 // Check whether a MAC is already in use by an existing UHID device.
@@ -49,35 +45,39 @@ bool is_active_on_system(const Mac &mac) {
   return false;
 }
 
-std::set<uint16_t> &pool() {
-  static std::set<uint16_t> instance;
+uint16_t &next_id() {
+  static uint16_t instance = 1;
   return instance;
 }
 
-std::mutex &pool_mutex() {
+std::mutex &next_id_mutex() {
   static std::mutex instance;
   return instance;
 }
 
 } // namespace
 
-Mac Mac::generate() {
-  std::lock_guard<std::mutex> lock(pool_mutex());
-  auto &used = pool();
-  uint16_t id = 1;
-  while (used.count(id) || is_active_on_system(from_id(id))) {
+Result<Mac> Mac::generate() {
+  std::lock_guard<std::mutex> lock(next_id_mutex());
+  auto &id = next_id();
+  auto start = id;
+  while (is_active_on_system(from_id(id))) {
     ++id;
+    if (id == start) {
+      return Error("Exhausted the MAC address space");
+    }
   }
-  used.insert(id);
-  return from_id(id);
+  auto mac = from_id(id);
+  ++id;
+  return mac;
 }
 
-void Mac::release(const Mac &mac) {
-  std::lock_guard<std::mutex> lock(pool_mutex());
-  pool().erase(to_id(mac));
-}
+Result<Mac> Mac::parse(const std::string &str) {
+  static const std::regex mac_format("^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$");
+  if (!std::regex_match(str, mac_format)) {
+    return Error("Invalid MAC address: " + str);
+  }
 
-Mac Mac::parse(const std::string &str) {
   Mac mac;
   std::stringstream ss(str);
   for (int i = 0; i < 6; ++i) {
