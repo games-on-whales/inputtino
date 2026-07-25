@@ -108,26 +108,39 @@ set(PUBLIC_HEADERS
         include/inputtino/input.h)
 
 if (UNIX AND NOT APPLE)
+    # The basic uinput joypads (XboxOneJoypad, PS5JoypadUinput, SwitchJoypadUinput)
+    # are always built: they need only uinput and act as the universal fallback
+    # picked by create_joypad() when /dev/uhid is unavailable.
     list(APPEND SRC_LIST
-            "src/uinput/joypad_nintendo.cpp"
+            "src/mac.cpp"
+            "src/host_capability.cpp"
             "src/uinput/joypad_xbox.cpp"
+            "src/uinput/joypad_ps.cpp"
+            "src/uinput/joypad_nintendo.cpp"
             "src/uinput/keyboard.cpp"
             "src/uinput/mouse.cpp"
             "src/uinput/pentablet.cpp"
             "src/uinput/touchscreen.cpp"
             "src/uinput/trackpad.cpp")
 
+    # USE_UHID additionally builds the rich uhid joypads (PS5Joypad, SwitchJoypad).
+    # It defaults ON; both backends then coexist and the choice is made at runtime
+    # by create_joypad(). USE_UHID=OFF drops the uhid sources for size-constrained
+    # builds, in which case create_joypad() always returns the uinput backend.
     if (USE_UHID)
-        message("Using uhid implementation for DualSense controller")
-        list(APPEND SRC_LIST "src/uhid/joypad_ps5.cpp")
+        message("Building uhid joypads (PS5Joypad / SwitchJoypad) alongside the uinput fallbacks")
+        list(APPEND SRC_LIST "src/uhid/joypad_ps5.cpp" "src/uhid/uhid.cpp")
+        list(APPEND SRC_LIST "src/uhid/joypad_switch.cpp")
         target_include_directories(libinputtino PUBLIC "src/uhid/include/")
+        target_compile_definitions(libinputtino PRIVATE INPUTTINO_USE_UHID)
     else ()
-        message("Using uinput implementation for DualSense controller")
-        list(APPEND SRC_LIST "src/uinput/joypad_ps.cpp")
+        message("USE_UHID=OFF: building uinput joypads only; create_joypad() will not offer uhid backends")
     endif ()
 
     target_sources(libinputtino PRIVATE ${SRC_LIST})
     target_include_directories(libinputtino PUBLIC "src/uinput/include")
+    # Internal helpers shared by the uinput and uhid joypad backends (udev_helpers.hpp)
+    target_include_directories(libinputtino PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
 endif ()
 
 if (BUILD_C_BINDINGS)
