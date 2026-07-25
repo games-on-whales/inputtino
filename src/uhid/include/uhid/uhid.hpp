@@ -3,10 +3,7 @@
 #include <algorithm>
 #include <errno.h>
 #include <fcntl.h>
-#include <filesystem>
-#include <fstream>
 #include <functional>
-#include <iomanip>
 #include <inputtino/mac.hpp>
 #include <inputtino/result.hpp>
 #include <iostream>
@@ -108,8 +105,8 @@ static void set_c_str(const std::string &str, unsigned char *c_str) {
 
 constexpr int UHID_POLL_TIMEOUT = 500; // ms
 
-inputtino::Result<Device> Device::create(const DeviceDefinition &definition,
-                                         const std::function<void(const uhid_event &ev, int fd)> &on_event) {
+inline inputtino::Result<Device> Device::create(const DeviceDefinition &definition,
+                                                 const std::function<void(const uhid_event &ev, int fd)> &on_event) {
 
   int fd = open("/dev/uhid", O_RDWR | O_CLOEXEC);
   if (fd < 0) {
@@ -172,47 +169,8 @@ inputtino::Result<Device> Device::create(const DeviceDefinition &definition,
 
 /**
  * Find sysfs input nodes for a UHID device by vendor ID and MAC.
- * Shared by SwitchJoypad and PS5Joypad.
+ * Shared by SwitchJoypad and PS5Joypad. Implemented in uhid.cpp.
  */
-static std::vector<std::string> find_uhid_sys_nodes(uint16_t vendor_id, const inputtino::Mac &mac) {
-  const std::string base_path = "/sys/devices/virtual/misc/uhid";
-  std::vector<std::string> nodes;
-  if (!std::filesystem::exists(base_path)) {
-    return nodes;
-  }
-
-  std::ostringstream target_id;
-  target_id << std::uppercase << std::hex << std::setfill('0') << std::setw(4)
-            << static_cast<unsigned int>(vendor_id);
-
-  for (const auto &uhid_entry : std::filesystem::directory_iterator{base_path}) {
-    if (!uhid_entry.is_directory()) {
-      continue;
-    }
-    if (uhid_entry.path().filename().string().find(target_id.str()) == std::string::npos) {
-      continue;
-    }
-    auto input_path = uhid_entry.path() / "input";
-    if (!std::filesystem::exists(input_path)) {
-      continue;
-    }
-    for (const auto &dev_entry : std::filesystem::directory_iterator{input_path}) {
-      if (!dev_entry.is_directory()) {
-        continue;
-      }
-      auto uniq_path = dev_entry.path() / "uniq";
-      if (!std::filesystem::exists(uniq_path)) {
-        continue;
-      }
-      std::ifstream uniq_file{uniq_path};
-      std::string uniq_value;
-      std::getline(uniq_file, uniq_value);
-      if (mac.matches(uniq_value)) {
-        nodes.push_back(dev_entry.path().string());
-      }
-    }
-  }
-  return nodes;
-}
+std::vector<std::string> find_uhid_sys_nodes(uint16_t vendor_id, const inputtino::Mac &mac);
 
 } // namespace uhid
