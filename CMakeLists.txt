@@ -109,6 +109,7 @@ set(PUBLIC_HEADERS
 
 if (UNIX AND NOT APPLE)
     list(APPEND SRC_LIST
+            "src/mac.cpp"
             "src/uinput/joypad_nintendo.cpp"
             "src/uinput/joypad_xbox.cpp"
             "src/uinput/keyboard.cpp"
@@ -119,7 +120,7 @@ if (UNIX AND NOT APPLE)
 
     if (USE_UHID)
         message("Using uhid implementation for DualSense controller")
-        list(APPEND SRC_LIST "src/uhid/joypad_ps5.cpp")
+        list(APPEND SRC_LIST "src/uhid/joypad_ps5.cpp" "src/uhid/uhid.cpp")
         target_include_directories(libinputtino PUBLIC "src/uhid/include/")
     else ()
         message("Using uinput implementation for DualSense controller")

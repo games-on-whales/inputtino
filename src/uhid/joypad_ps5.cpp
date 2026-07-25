@@ -94,8 +94,7 @@ static void on_uhid_event(std::shared_ptr<PS5JoypadState> state, uhid_event ev, 
                 &answer.u.get_report_reply.data[0]);
 
       // Copy MAC address data
-      std::reverse_copy(&state->mac_address[0],
-                        &state->mac_address[0] + sizeof(state->mac_address),
+      std::reverse_copy(state->mac.bytes.begin(), state->mac.bytes.end(),
                         &answer.u.get_report_reply.data[1]);
 
       answer.u.get_report_reply.size = sizeof(uhid::ps5_pairing_info);
@@ -216,9 +215,9 @@ static void on_uhid_event(std::shared_ptr<PS5JoypadState> state, uhid_event ev, 
   }
 }
 
-PS5Joypad::PS5Joypad(uint16_t vendor_id, std::array<unsigned char, 6> mac_address)
+PS5Joypad::PS5Joypad(uint16_t vendor_id, const Mac &mac)
     : _state(std::make_shared<PS5JoypadState>()) {
-  std::copy(mac_address.begin(), mac_address.end(), this->_state->mac_address);
+  this->_state->mac = mac;
   this->_state->vendor_id = vendor_id;
   // Set touchpad as not pressed
   this->_state->current_state.points[0].contact = 1;
@@ -229,13 +228,15 @@ PS5Joypad::PS5Joypad(uint16_t vendor_id, std::array<unsigned char, 6> mac_addres
 }
 
 PS5Joypad::~PS5Joypad() {
-  if (this->_state && this->_state->dev) {
-    this->_state->stop_repeat_thread = true;
-    if (this->_send_input_thread.joinable()) {
-      this->_send_input_thread.join();
+  if (this->_state) {
+    if (this->_state->dev) {
+      this->_state->stop_repeat_thread = true;
+      if (this->_send_input_thread.joinable()) {
+        this->_send_input_thread.join();
+      }
+      this->_state->dev->stop_thread();
+      this->_state->dev.reset();
     }
-    this->_state->dev->stop_thread();
-    this->_state->dev.reset(); // Will trigger ~Device and ultimately destroy the device
   }
 }
 
@@ -258,21 +259,11 @@ Result<PS5Joypad> PS5Joypad::create(const DeviceDefinition &device) {
     def.report_description = {&uhid::ps5_rdesc[0], &uhid::ps5_rdesc[0] + sizeof(uhid::ps5_rdesc)};
   }
 
-  std::array<unsigned char, 6> mac_address = {};
-  if (def.uniq.empty()) {
-    mac_address = generate_mac_address();
-  } else {
-    // Assuming we have in input a MAC address in the format of xx:xx:xx:xx:xx:xx
-    std::stringstream ss(def.uniq);
-    for (int i = 0; i < 6; ++i) {
-      unsigned int value;
-      ss >> std::hex >> value;
-      mac_address[i] = static_cast<unsigned char>(value);
-      if (i < 5)
-        ss.ignore(1, ':');
-    }
+  auto mac = def.uniq.empty() ? Mac::generate() : Mac::parse(def.uniq);
+  if (!mac) {
+    return Error(mac.getErrorMessage());
   }
-  auto joypad = PS5Joypad(device.vendor_id, mac_address);
+  auto joypad = PS5Joypad(device.vendor_id, *mac);
 
   if (def.phys.empty()) {
     def.phys = "INPUTTINO_BT_LINK";
@@ -306,70 +297,12 @@ static int scale_value(int input, int input_start, int input_end, int output_sta
   return output_start + std::round(slope * (input - input_start));
 }
 
-template <typename T> std::string to_hex(T i) {
-  std::stringstream stream;
-  stream << std::hex << std::uppercase << i;
-  return stream.str();
-}
-
 std::string PS5Joypad::get_mac_address() const {
-  std::stringstream stream;
-  stream << std::hex << std::setfill('0') << std::setw(2) << (unsigned int)_state->mac_address[0] << ":" << std::setw(2)
-         << (unsigned int)_state->mac_address[1] << ":" << std::setw(2) << (unsigned int)_state->mac_address[2] << ":"
-         << std::setw(2) << (unsigned int)_state->mac_address[3] << ":" << std::setw(2)
-         << (unsigned int)_state->mac_address[4] << ":" << std::setw(2) << (unsigned int)_state->mac_address[5];
-  return stream.str();
+  return _state->mac.to_string();
 }
 
-/**
- * The trick here is to match the devices under /sys/devices/virtual/misc/uhid/
- * with the MAC address that we've set for the current device
- *
- * @returns a list of paths to the created input devices ex:
- * /sys/devices/virtual/misc/uhid/0003:054C:0CE6.000D/input/input58/
- */
 std::vector<std::string> PS5Joypad::get_sys_nodes() const {
-  std::vector<std::string> nodes;
-  auto base_path = "/sys/devices/virtual/misc/uhid/";
-  auto target_mac = get_mac_address();
-  if (std::filesystem::exists(base_path)) {
-    auto uhid_entries = std::filesystem::directory_iterator{base_path};
-    for (auto uhid_entry : uhid_entries) {
-      // Here we are looking for a directory that has a name like {BUS_ID}:{VENDOR_ID}:{PRODUCT_ID}.xxxx
-      // (ex: 0003:054C:0CE6.000D)
-      auto uhid_candidate_path = uhid_entry.path().filename().string();
-      auto target_id = to_hex(this->_state->vendor_id);
-      if (uhid_entry.is_directory() && uhid_candidate_path.find(target_id) != std::string::npos) {
-        // Found a match! Let's scan the input devices in that directory
-        if (std::filesystem::exists(uhid_entry.path() / "input")) {
-          // ex: /sys/devices/virtual/misc/uhid/0003:054C:0CE6.000D/input/
-          auto dev_entries = std::filesystem::directory_iterator{uhid_entry.path() / "input"};
-          for (auto dev_entry : dev_entries) {
-            // Here we only have a match if the "uniq" file inside contains the same MAC address that we've set
-            if (dev_entry.is_directory()) {
-              // ex: /sys/devices/virtual/misc/uhid/0003:054C:0CE6.000D/input/input58/uniq
-              auto dev_uniq_path = dev_entry.path() / "uniq";
-              if (std::filesystem::exists(dev_uniq_path)) {
-                std::ifstream dev_uniq_file{dev_uniq_path};
-                std::string line;
-                std::getline(dev_uniq_file, line);
-                if (line == target_mac) {
-                  nodes.push_back(dev_entry.path().string());
-                }
-              } else {
-                fprintf(stderr, "Unable to get joypad nodes, path %s does not exist\n", dev_uniq_path.string().c_str());
-              }
-            }
-          }
-        } else {
-          fprintf(stderr, "Unable to get joypad nodes, path %s does not exist\n", uhid_entry.path().string().c_str());
-        }
-      }
-    }
-  } else {
-    fprintf(stderr, "Unable to get joypad nodes, path %s does not exist\n", base_path);
-  }
-  return nodes;
+  return uhid::find_uhid_sys_nodes(_state->vendor_id, _state->mac);
 }
 
 std::vector<std::string> PS5Joypad::get_nodes() const {
