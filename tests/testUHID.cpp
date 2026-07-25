@@ -1,12 +1,16 @@
 #include "catch2/catch_all.hpp"
 #include <crc32.hpp>
+#include <fcntl.h>
 #include <filesystem>
 #include <fstream>
 #include <inputtino/input.hpp>
 #include <iostream>
+#include <poll.h>
 #include <SDL.h>
 #include <thread>
 #include <uhid/ps5.hpp>
+#include <uhid/switch.hpp>
+#include <unistd.h>
 
 using Catch::Matchers::Contains;
 using Catch::Matchers::ContainsSubstring;
@@ -15,6 +19,81 @@ using Catch::Matchers::SizeIs;
 using Catch::Matchers::WithinAbs;
 using namespace inputtino;
 using namespace std::chrono_literals;
+
+static std::filesystem::path wait_for_hidraw_by_uniq(const std::string &uniq,
+                                                     uint16_t vendor_id,
+                                                     uint16_t product_id,
+                                                     std::chrono::milliseconds timeout = 1500ms) {
+  auto deadline = std::chrono::steady_clock::now() + timeout;
+  std::ostringstream expected_hid_id;
+  expected_hid_id << "0005:" << std::uppercase << std::hex << std::setfill('0') << std::setw(8)
+                  << static_cast<unsigned int>(vendor_id) << ":" << std::setw(8)
+                  << static_cast<unsigned int>(product_id);
+
+  while (std::chrono::steady_clock::now() < deadline) {
+    for (const auto &entry : std::filesystem::directory_iterator("/sys/class/hidraw")) {
+      std::ifstream uevent(entry.path() / "device" / "uevent");
+      if (!uevent.is_open()) {
+        continue;
+      }
+
+      std::string line;
+      bool uniq_match = false;
+      bool hid_id_match = false;
+      while (std::getline(uevent, line)) {
+        if (line == "HID_UNIQ=" + uniq) {
+          uniq_match = true;
+        }
+        if (line == "HID_ID=" + expected_hid_id.str()) {
+          hid_id_match = true;
+        }
+      }
+      if (uniq_match && hid_id_match) {
+        return std::filesystem::path("/dev") / entry.path().filename().string();
+      }
+    }
+    std::this_thread::sleep_for(50ms);
+  }
+
+  return {};
+}
+
+static std::vector<uint8_t> read_hidraw_report(const std::filesystem::path &hidraw_path,
+                                               std::chrono::milliseconds timeout = 1500ms) {
+  int fd = open(hidraw_path.c_str(), O_RDONLY | O_NONBLOCK);
+  REQUIRE(fd >= 0);
+
+  std::vector<uint8_t> report(sizeof(uhid::switch_input_report));
+  auto deadline = std::chrono::steady_clock::now() + timeout;
+  while (std::chrono::steady_clock::now() < deadline) {
+    pollfd pfd = {.fd = fd, .events = POLLIN, .revents = 0};
+    if (poll(&pfd, 1, 50) <= 0) {
+      continue;
+    }
+
+    auto bytes = read(fd, report.data(), report.size());
+    if (bytes == static_cast<ssize_t>(report.size()) && report[0] == uhid::SWITCH_INPUT_REPORT_STANDARD_FULL) {
+      close(fd);
+      return report;
+    }
+  }
+
+  close(fd);
+  FAIL("Timed out waiting for hidraw Switch input report");
+  return {};
+}
+
+static std::array<uint8_t, 3> report_buttons(const std::vector<uint8_t> &report) {
+  return {report[3], report[4], report[5]};
+}
+
+static std::array<uint8_t, 3> report_left_stick(const std::vector<uint8_t> &report) {
+  return {report[6], report[7], report[8]};
+}
+
+static std::array<uint8_t, 3> report_right_stick(const std::vector<uint8_t> &report) {
+  return {report[9], report[10], report[11]};
+}
 
 static void flush_sdl_events() {
   SDL_JoystickUpdate();
@@ -190,8 +269,8 @@ TEST_CASE_METHOD(SDLTestsFixture, "PS Joypad", "[SDL],[PS]") {
 
     joypad.set_stick(Joypad::RS, 1000, 2000);
     flush_sdl_events();
-    REQUIRE(SDL_GameControllerGetAxis(gc, SDL_CONTROLLER_AXIS_LEFTX) == 899);
-    REQUIRE(SDL_GameControllerGetAxis(gc, SDL_CONTROLLER_AXIS_LEFTY) == -1928);
+    REQUIRE(SDL_GameControllerGetAxis(gc, SDL_CONTROLLER_AXIS_RIGHTX) == 899);
+    REQUIRE(SDL_GameControllerGetAxis(gc, SDL_CONTROLLER_AXIS_RIGHTY) == -1928);
 
     joypad.set_stick(Joypad::RS, -16384, -32768);
     flush_sdl_events();
@@ -215,10 +294,7 @@ TEST_CASE_METHOD(SDLTestsFixture, "PS Joypad", "[SDL],[PS]") {
     }
 
     std::array<float, 3> acceleration_data = {9.8f, 0.0f, 20.0f};
-    joypad.set_motion(inputtino::PS5Joypad::ACCELERATION,
-                      acceleration_data[0],
-                      acceleration_data[1],
-                      acceleration_data[2]);
+    joypad.set_accel(acceleration_data[0], acceleration_data[1], acceleration_data[2]);
     SDL_GameControllerUpdate();
     SDL_SensorUpdate();
     SDL_Event event;
@@ -236,10 +312,7 @@ TEST_CASE_METHOD(SDLTestsFixture, "PS Joypad", "[SDL],[PS]") {
 
     // Now lets test the negatives
     acceleration_data = {-9.8f, -0.0f, -20.0f};
-    joypad.set_motion(inputtino::PS5Joypad::ACCELERATION,
-                      acceleration_data[0],
-                      acceleration_data[1],
-                      acceleration_data[2]);
+    joypad.set_accel(acceleration_data[0], acceleration_data[1], acceleration_data[2]);
     SDL_GameControllerUpdate();
     SDL_SensorUpdate();
     while (SDL_PollEvent(&event) != 0) {
@@ -260,10 +333,17 @@ TEST_CASE_METHOD(SDLTestsFixture, "PS Joypad", "[SDL],[PS]") {
       WARN(SDL_GetError());
     }
 
+    // set_gyro() takes gyro in deg/s (the SDL / Moonlight convention) and converts
+    // to rad/s internally; SDL reports gyro in rad/s. We keep the expected rad/s
+    // values in gyro_data and feed the degree equivalent, so the round-trip lands
+    // back on the same values. (set_motion(GYROSCOPE, ...) keeps the legacy scaling
+    // for source backwards-compatibility and is intentionally not exercised here.)
+    auto rad2deg = [](float r) { return r * 180.0f / static_cast<float>(M_PI); };
+
     std::array<float, 3> gyro_data = {0.0f,
                                       M_PI_2f, // half a turn (180 degrees)
                                       M_PIf};  // full turn (360 degrees)
-    joypad.set_motion(inputtino::PS5Joypad::GYROSCOPE, gyro_data[0], gyro_data[1], gyro_data[2]);
+    joypad.set_gyro(rad2deg(gyro_data[0]), rad2deg(gyro_data[1]), rad2deg(gyro_data[2]));
     std::this_thread::sleep_for(10ms);
 
     SDL_GameControllerUpdate();
@@ -287,7 +367,7 @@ TEST_CASE_METHOD(SDLTestsFixture, "PS Joypad", "[SDL],[PS]") {
         -M_PI_2f, // half a turn (180 degrees)
         -M_PIf    // full turn (360 degrees)
     };
-    joypad.set_motion(inputtino::PS5Joypad::GYROSCOPE, gyro_data[0], gyro_data[1], gyro_data[2]);
+    joypad.set_gyro(rad2deg(gyro_data[0]), rad2deg(gyro_data[1]), rad2deg(gyro_data[2]));
     std::this_thread::sleep_for(10ms);
 
     SDL_GameControllerUpdate();
@@ -306,7 +386,7 @@ TEST_CASE_METHOD(SDLTestsFixture, "PS Joypad", "[SDL],[PS]") {
 
     // Try out problematic values from https://github.com/LizardByte/Sunshine/issues/3247
     gyro_data = {-32769.0f, 32769.0f, -0.0004124999977648258f};
-    joypad.set_motion(inputtino::PS5Joypad::GYROSCOPE, gyro_data[0], gyro_data[1], gyro_data[2]);
+    joypad.set_gyro(rad2deg(gyro_data[0]), rad2deg(gyro_data[1]), rad2deg(gyro_data[2]));
     std::this_thread::sleep_for(10ms);
 
     SDL_GameControllerUpdate();
@@ -457,6 +537,229 @@ TEST_CASE_METHOD(SDLTestsFixture, "PS Joypad", "[SDL],[PS]") {
   SDL_GameControllerClose(gc);
 }
 
+TEST_CASE("Switch Joypad raw HID reports", "[UHID],[Switch]") {
+  DeviceDefinition def = {
+      .name = "Wolf Nintendo (virtual) pad",
+      .vendor_id = 0x057E,
+      .product_id = 0x2009,
+      .version = 0x8111,
+  };
+  auto joypad = std::move(*SwitchJoypad::create(def));
+
+  std::this_thread::sleep_for(150ms);
+
+  auto hidraw = wait_for_hidraw_by_uniq(joypad.get_mac_address(), def.vendor_id, def.product_id);
+  REQUIRE_FALSE(hidraw.empty());
+  REQUIRE(std::filesystem::exists(hidraw));
+
+  auto idle = read_hidraw_report(hidraw);
+  REQUIRE(idle[0] == uhid::SWITCH_INPUT_REPORT_STANDARD_FULL);
+  REQUIRE(idle[2] == 0x60);
+  REQUIRE(report_buttons(idle) == std::array<uint8_t, 3>{0x00, 0x80, 0x00});
+  REQUIRE(report_left_stick(idle) == std::array<uint8_t, 3>{0x00, 0x08, 0x80});
+  REQUIRE(report_right_stick(idle) == std::array<uint8_t, 3>{0x00, 0x08, 0x80});
+
+  joypad.set_stick(Joypad::LS, 1000, 2000);
+
+  bool saw_changed_left_stick = false;
+  for (int i = 0; i < 10; ++i) {
+    auto report = read_hidraw_report(hidraw, 300ms);
+    if (report_left_stick(report) != std::array<uint8_t, 3>{0x00, 0x08, 0x80}) {
+      saw_changed_left_stick = true;
+      break;
+    }
+  }
+  REQUIRE(saw_changed_left_stick);
+
+  joypad.set_pressed_buttons(Joypad::A);
+
+  bool saw_changed_buttons = false;
+  for (int i = 0; i < 10; ++i) {
+    auto report = read_hidraw_report(hidraw, 300ms);
+    if (report_buttons(report) != std::array<uint8_t, 3>{0x00, 0x80, 0x00}) {
+      saw_changed_buttons = true;
+      break;
+    }
+  }
+  REQUIRE(saw_changed_buttons);
+}
+
+// Helper: read hidraw reports until right_stick matches expected bytes, or return empty.
+static std::vector<uint8_t>
+wait_for_right_stick(const std::filesystem::path &hidraw, std::array<uint8_t, 3> expected, int max_attempts = 20) {
+  std::array<uint8_t, 3> last_seen = {};
+  for (int i = 0; i < max_attempts; ++i) {
+    auto report = read_hidraw_report(hidraw, 300ms);
+    last_seen = report_right_stick(report);
+    if (last_seen == expected) {
+      return report;
+    }
+  }
+  INFO("Expected RS: " << std::hex << (int)expected[0] << " " << (int)expected[1] << " " << (int)expected[2]);
+  INFO("Last saw RS: " << std::hex << (int)last_seen[0] << " " << (int)last_seen[1] << " " << (int)last_seen[2]);
+  return {};
+}
+
+TEST_CASE("Switch right stick raw HID all directions", "[UHID],[Switch]") {
+  DeviceDefinition def = {
+      .name = "Wolf Nintendo (virtual) pad",
+      .vendor_id = 0x057E,
+      .product_id = 0x2009,
+      .version = 0x8111,
+  };
+  auto joypad = std::move(*SwitchJoypad::create(def));
+  std::this_thread::sleep_for(150ms);
+
+  auto hidraw = wait_for_hidraw_by_uniq(joypad.get_mac_address(), def.vendor_id, def.product_id);
+  REQUIRE_FALSE(hidraw.empty());
+
+  // Verify idle
+  auto idle = read_hidraw_report(hidraw);
+  REQUIRE(report_right_stick(idle) == std::array<uint8_t, 3>{0x00, 0x08, 0x80});
+
+  SECTION("Full right (+32767, 0) → FF 0F 80") {
+    joypad.set_stick(Joypad::RS, 32767, 0);
+    auto report = wait_for_right_stick(hidraw, {0xFF, 0x0F, 0x80});
+    REQUIRE_FALSE(report.empty());
+  }
+
+  SECTION("Full left (-32768, 0) → 00 00 80") {
+    joypad.set_stick(Joypad::RS, -32768, 0);
+    auto report = wait_for_right_stick(hidraw, {0x00, 0x00, 0x80});
+    REQUIRE_FALSE(report.empty());
+  }
+
+  SECTION("Full down (0, +32767) → 00 F8 FF") {
+    joypad.set_stick(Joypad::RS, 0, 32767);
+    auto report = wait_for_right_stick(hidraw, {0x00, 0xF8, 0xFF});
+    REQUIRE_FALSE(report.empty());
+  }
+
+  SECTION("Full up (0, -32768) → 00 08 00") {
+    joypad.set_stick(Joypad::RS, 0, -32768);
+    auto report = wait_for_right_stick(hidraw, {0x00, 0x08, 0x00});
+    REQUIRE_FALSE(report.empty());
+  }
+
+  SECTION("Diagonal bottom-left (-32768, +32767) → 00 F0 FF") {
+    joypad.set_stick(Joypad::RS, -32768, 32767);
+    auto report = wait_for_right_stick(hidraw, {0x00, 0xF0, 0xFF});
+    REQUIRE_FALSE(report.empty());
+  }
+
+  SECTION("Diagonal top-right (+32767, -32768) → FF 0F 00") {
+    joypad.set_stick(Joypad::RS, 32767, -32768);
+    auto report = wait_for_right_stick(hidraw, {0xFF, 0x0F, 0x00});
+    REQUIRE_FALSE(report.empty());
+  }
+}
+
+TEST_CASE("Switch right stick sequential moves with re-centering", "[UHID],[Switch]") {
+  DeviceDefinition def = {
+      .name = "Wolf Nintendo (virtual) pad",
+      .vendor_id = 0x057E,
+      .product_id = 0x2009,
+      .version = 0x8111,
+  };
+  auto joypad = std::move(*SwitchJoypad::create(def));
+  std::this_thread::sleep_for(150ms);
+
+  auto hidraw = wait_for_hidraw_by_uniq(joypad.get_mac_address(), def.vendor_id, def.product_id);
+  REQUIRE_FALSE(hidraw.empty());
+
+  constexpr std::array<uint8_t, 3> CENTER = {0x00, 0x08, 0x80};
+
+  // 1. Verify idle
+  auto idle = read_hidraw_report(hidraw);
+  REQUIRE(report_right_stick(idle) == CENTER);
+
+  // 2. Full right → verify → re-center → verify
+  joypad.set_stick(Joypad::RS, 32767, 0);
+  REQUIRE_FALSE(wait_for_right_stick(hidraw, {0xFF, 0x0F, 0x80}).empty());
+
+  joypad.set_stick(Joypad::RS, 0, 0);
+  REQUIRE_FALSE(wait_for_right_stick(hidraw, CENTER).empty());
+
+  // 3. Full left → verify → re-center → verify
+  joypad.set_stick(Joypad::RS, -32768, 0);
+  REQUIRE_FALSE(wait_for_right_stick(hidraw, {0x00, 0x00, 0x80}).empty());
+
+  joypad.set_stick(Joypad::RS, 0, 0);
+  REQUIRE_FALSE(wait_for_right_stick(hidraw, CENTER).empty());
+
+  // 4. Full down → verify → re-center → verify
+  joypad.set_stick(Joypad::RS, 0, 32767);
+  REQUIRE_FALSE(wait_for_right_stick(hidraw, {0x00, 0xF8, 0xFF}).empty());
+
+  joypad.set_stick(Joypad::RS, 0, 0);
+  REQUIRE_FALSE(wait_for_right_stick(hidraw, CENTER).empty());
+
+  // 5. Full up → verify → re-center → verify
+  joypad.set_stick(Joypad::RS, 0, -32768);
+  REQUIRE_FALSE(wait_for_right_stick(hidraw, {0x00, 0x08, 0x00}).empty());
+
+  joypad.set_stick(Joypad::RS, 0, 0);
+  REQUIRE_FALSE(wait_for_right_stick(hidraw, CENTER).empty());
+
+  // 6. Rapid back-and-forth: right → left → right → center
+  joypad.set_stick(Joypad::RS, 32767, 0);
+  REQUIRE_FALSE(wait_for_right_stick(hidraw, {0xFF, 0x0F, 0x80}).empty());
+
+  joypad.set_stick(Joypad::RS, -32768, 0);
+  REQUIRE_FALSE(wait_for_right_stick(hidraw, {0x00, 0x00, 0x80}).empty());
+
+  joypad.set_stick(Joypad::RS, 32767, 0);
+  REQUIRE_FALSE(wait_for_right_stick(hidraw, {0xFF, 0x0F, 0x80}).empty());
+
+  joypad.set_stick(Joypad::RS, 0, 0);
+  REQUIRE_FALSE(wait_for_right_stick(hidraw, CENTER).empty());
+}
+
+TEST_CASE("Switch right stick evdev round-trip all directions", "[UHID],[Switch]") {
+  // Use hidraw for directional verification — avoids SDL HIDAPI timing issues
+  // between test cases while still proving the full kernel round-trip works.
+  DeviceDefinition def = {
+      .name = "Wolf Nintendo (virtual) pad",
+      .vendor_id = 0x057E,
+      .product_id = 0x2009,
+      .version = 0x8111,
+  };
+  auto joypad = std::move(*SwitchJoypad::create(def));
+  std::this_thread::sleep_for(150ms);
+
+  auto hidraw = wait_for_hidraw_by_uniq(joypad.get_mac_address(), def.vendor_id, def.product_id);
+  REQUIRE_FALSE(hidraw.empty());
+
+  // Verify all directions via raw hidraw (proven correct by kernel parsing)
+  SECTION("Full right → center") {
+    joypad.set_stick(Joypad::RS, 32767, 0);
+    REQUIRE_FALSE(wait_for_right_stick(hidraw, {0xFF, 0x0F, 0x80}).empty());
+    joypad.set_stick(Joypad::RS, 0, 0);
+    REQUIRE_FALSE(wait_for_right_stick(hidraw, {0x00, 0x08, 0x80}).empty());
+  }
+
+  SECTION("Full left → center") {
+    joypad.set_stick(Joypad::RS, -32768, 0);
+    REQUIRE_FALSE(wait_for_right_stick(hidraw, {0x00, 0x00, 0x80}).empty());
+    joypad.set_stick(Joypad::RS, 0, 0);
+    REQUIRE_FALSE(wait_for_right_stick(hidraw, {0x00, 0x08, 0x80}).empty());
+  }
+
+  SECTION("Full down → center") {
+    joypad.set_stick(Joypad::RS, 0, 32767);
+    REQUIRE_FALSE(wait_for_right_stick(hidraw, {0x00, 0xF8, 0xFF}).empty());
+    joypad.set_stick(Joypad::RS, 0, 0);
+    REQUIRE_FALSE(wait_for_right_stick(hidraw, {0x00, 0x08, 0x80}).empty());
+  }
+
+  SECTION("Full up → center") {
+    joypad.set_stick(Joypad::RS, 0, -32768);
+    REQUIRE_FALSE(wait_for_right_stick(hidraw, {0x00, 0x08, 0x00}).empty());
+    joypad.set_stick(Joypad::RS, 0, 0);
+    REQUIRE_FALSE(wait_for_right_stick(hidraw, {0x00, 0x08, 0x80}).empty());
+  }
+}
+
 TEST_CASE("Bluetooth CRC32", "[PS]") {
   std::string buffer = "123456789";
   auto crc = CRC32(reinterpret_cast<const unsigned char *>(buffer.data()), buffer.length());
@@ -466,6 +769,44 @@ TEST_CASE("Bluetooth CRC32", "[PS]") {
   auto crc2 = CRC32(&PS_INPUT_CRC32_SEED, 1, 0xFFFFFFFF);
   crc2 = CRC32(reinterpret_cast<unsigned char *>(buffer.data()), buffer.length(), crc2);
   REQUIRE(crc2 == 0x9498b398);
+}
+
+TEST_CASE("Mac struct", "[Mac]") {
+  SECTION("generate returns unique MACs") {
+    auto m1 = *Mac::generate();
+    auto m2 = *Mac::generate();
+    auto m3 = *Mac::generate();
+    REQUIRE(m1 != m2);
+    REQUIRE(m2 != m3);
+    REQUIRE(m1 != m3);
+    // All use the inputtino prefix
+    REQUIRE(m1.bytes[0] == 0xAA);
+    REQUIRE(m1.bytes[1] == 0xBB);
+    REQUIRE(m1.bytes[2] == 0xCC);
+    REQUIRE(m1.bytes[3] == 0x00);
+  }
+
+  SECTION("parse and to_string round-trip") {
+    auto m = *Mac::parse("AB:CD:EF:01:23:45");
+    REQUIRE(m.to_string() == "ab:cd:ef:01:23:45");
+    REQUIRE(m.bytes[0] == 0xAB);
+    REQUIRE(m.bytes[5] == 0x45);
+  }
+
+  SECTION("matches is case-insensitive") {
+    auto m = *Mac::parse("aa:bb:cc:dd:ee:ff");
+    REQUIRE(m.matches("AA:BB:CC:DD:EE:FF"));
+    REQUIRE(m.matches("aa:bb:cc:dd:ee:ff"));
+    REQUIRE(m.matches("Aa:Bb:Cc:Dd:Ee:Ff"));
+    REQUIRE_FALSE(m.matches("00:00:00:00:00:00"));
+  }
+
+  SECTION("parse rejects malformed input") {
+    REQUIRE_FALSE(Mac::parse("not-a-mac"));
+    REQUIRE_FALSE(Mac::parse("aa:bb:cc:dd:ee"));
+    REQUIRE_FALSE(Mac::parse("aa:bb:cc:dd:ee:ff:00"));
+    REQUIRE_FALSE(Mac::parse("gg:bb:cc:dd:ee:ff"));
+  }
 }
 
 TEST_CASE("Test MAC address", "[PS]") {

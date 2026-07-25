@@ -155,18 +155,22 @@ TEST_CASE("C XOne API", "[C-API]") {
 TEST_CASE("C Switch API", "[C-API]") {
   InputtinoErrorHandler error_handler = {.eh = [](const char *message, void *_data) { FAIL(message); },
                                          .user_data = nullptr};
-  InputtinoDeviceDefinition def = {};
+  InputtinoDeviceDefinition def = {
+      .name = "Pro Controller",
+      .vendor_id = 0x057E,
+      .product_id = 0x2009,
+      .version = 0x8111,
+  };
   auto switch_ = inputtino_joypad_switch_create(&def, &error_handler);
   REQUIRE(switch_ != nullptr);
 
   int num_nodes = 0;
   auto nodes = inputtino_joypad_switch_get_nodes(switch_, &num_nodes);
-  REQUIRE(num_nodes == 2);
-  REQUIRE_THAT(std::string(nodes[0]), Catch::Matchers::StartsWith("/dev/input/event"));
-  REQUIRE_THAT(std::string(nodes[1]), Catch::Matchers::StartsWith("/dev/input/js"));
-
-  REQUIRE(std::filesystem::exists(nodes[0]));
-  REQUIRE(std::filesystem::exists(nodes[1]));
+  REQUIRE(num_nodes >= 1);
+  for (int i = 0; i < num_nodes; i++) {
+    REQUIRE_THAT(std::string(nodes[i]), Catch::Matchers::StartsWith("/dev/input/"));
+    REQUIRE(std::filesystem::exists(nodes[i]));
+  }
 
   { // TODO: test that this actually work
     inputtino_joypad_switch_set_pressed_buttons(switch_, INPUTTINO_JOYPAD_BTN::A | INPUTTINO_JOYPAD_BTN::B);
