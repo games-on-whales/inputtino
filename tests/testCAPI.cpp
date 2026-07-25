@@ -167,10 +167,10 @@ TEST_CASE("C Switch API", "[C-API]") {
   int num_nodes = 0;
   auto nodes = inputtino_joypad_switch_get_nodes(switch_, &num_nodes);
   REQUIRE(num_nodes >= 1);
-  REQUIRE_THAT(std::string(nodes[0]), Catch::Matchers::StartsWith("/dev/input/"));
-
-  REQUIRE(std::filesystem::exists(nodes[0]));
-  REQUIRE(std::filesystem::exists(nodes[1]));
+  for (int i = 0; i < num_nodes; i++) {
+    REQUIRE_THAT(std::string(nodes[i]), Catch::Matchers::StartsWith("/dev/input/"));
+    REQUIRE(std::filesystem::exists(nodes[i]));
+  }
 
   { // TODO: test that this actually work
     inputtino_joypad_switch_set_pressed_buttons(switch_, INPUTTINO_JOYPAD_BTN::A | INPUTTINO_JOYPAD_BTN::B);
