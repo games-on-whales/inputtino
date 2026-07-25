@@ -3,5 +3,5 @@
 #include <inputtino/input.hpp>
 
 namespace inputtino {
-struct PS5JoypadState : BaseJoypadState {};
+struct PS5JoypadUinputState : BaseJoypadState {};
 } // namespace inputtino

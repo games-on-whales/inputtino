@@ -1,12 +1,15 @@
 #include "catch2/catch_all.hpp"
 #include <crc32.hpp>
+#include <fcntl.h>
 #include <filesystem>
 #include <fstream>
 #include <inputtino/input.hpp>
 #include <iostream>
+#include <poll.h>
 #include <SDL.h>
 #include <thread>
 #include <uhid/ps5.hpp>
+#include <unistd.h>
 
 using Catch::Matchers::Contains;
 using Catch::Matchers::ContainsSubstring;
@@ -15,6 +18,44 @@ using Catch::Matchers::SizeIs;
 using Catch::Matchers::WithinAbs;
 using namespace inputtino;
 using namespace std::chrono_literals;
+
+static std::filesystem::path wait_for_hidraw_by_uniq(const std::string &uniq,
+                                                     uint16_t vendor_id,
+                                                     uint16_t product_id,
+                                                     std::chrono::milliseconds timeout = 1500ms) {
+  auto deadline = std::chrono::steady_clock::now() + timeout;
+  std::ostringstream expected_hid_id;
+  expected_hid_id << "0005:" << std::uppercase << std::hex << std::setfill('0') << std::setw(8)
+                  << static_cast<unsigned int>(vendor_id) << ":" << std::setw(8)
+                  << static_cast<unsigned int>(product_id);
+
+  while (std::chrono::steady_clock::now() < deadline) {
+    for (const auto &entry : std::filesystem::directory_iterator("/sys/class/hidraw")) {
+      std::ifstream uevent(entry.path() / "device" / "uevent");
+      if (!uevent.is_open()) {
+        continue;
+      }
+
+      std::string line;
+      bool uniq_match = false;
+      bool hid_id_match = false;
+      while (std::getline(uevent, line)) {
+        if (line == "HID_UNIQ=" + uniq) {
+          uniq_match = true;
+        }
+        if (line == "HID_ID=" + expected_hid_id.str()) {
+          hid_id_match = true;
+        }
+      }
+      if (uniq_match && hid_id_match) {
+        return std::filesystem::path("/dev") / entry.path().filename().string();
+      }
+    }
+    std::this_thread::sleep_for(50ms);
+  }
+
+  return {};
+}
 
 static void flush_sdl_events() {
   SDL_JoystickUpdate();
@@ -190,8 +231,8 @@ TEST_CASE_METHOD(SDLTestsFixture, "PS Joypad", "[SDL],[PS]") {
 
     joypad.set_stick(Joypad::RS, 1000, 2000);
     flush_sdl_events();
-    REQUIRE(SDL_GameControllerGetAxis(gc, SDL_CONTROLLER_AXIS_LEFTX) == 899);
-    REQUIRE(SDL_GameControllerGetAxis(gc, SDL_CONTROLLER_AXIS_LEFTY) == -1928);
+    REQUIRE(SDL_GameControllerGetAxis(gc, SDL_CONTROLLER_AXIS_RIGHTX) == 899);
+    REQUIRE(SDL_GameControllerGetAxis(gc, SDL_CONTROLLER_AXIS_RIGHTY) == -1928);
 
     joypad.set_stick(Joypad::RS, -16384, -32768);
     flush_sdl_events();
@@ -215,10 +256,7 @@ TEST_CASE_METHOD(SDLTestsFixture, "PS Joypad", "[SDL],[PS]") {
     }
 
     std::array<float, 3> acceleration_data = {9.8f, 0.0f, 20.0f};
-    joypad.set_motion(inputtino::PS5Joypad::ACCELERATION,
-                      acceleration_data[0],
-                      acceleration_data[1],
-                      acceleration_data[2]);
+    joypad.set_accel(acceleration_data[0], acceleration_data[1], acceleration_data[2]);
     SDL_GameControllerUpdate();
     SDL_SensorUpdate();
     SDL_Event event;
@@ -236,10 +274,7 @@ TEST_CASE_METHOD(SDLTestsFixture, "PS Joypad", "[SDL],[PS]") {
 
     // Now lets test the negatives
     acceleration_data = {-9.8f, -0.0f, -20.0f};
-    joypad.set_motion(inputtino::PS5Joypad::ACCELERATION,
-                      acceleration_data[0],
-                      acceleration_data[1],
-                      acceleration_data[2]);
+    joypad.set_accel(acceleration_data[0], acceleration_data[1], acceleration_data[2]);
     SDL_GameControllerUpdate();
     SDL_SensorUpdate();
     while (SDL_PollEvent(&event) != 0) {
@@ -260,10 +295,17 @@ TEST_CASE_METHOD(SDLTestsFixture, "PS Joypad", "[SDL],[PS]") {
       WARN(SDL_GetError());
     }
 
+    // set_gyro() takes gyro in deg/s (the SDL / Moonlight convention) and converts
+    // to rad/s internally; SDL reports gyro in rad/s. We keep the expected rad/s
+    // values in gyro_data and feed the degree equivalent, so the round-trip lands
+    // back on the same values. (set_motion(GYROSCOPE, ...) keeps the legacy scaling
+    // for source backwards-compatibility and is intentionally not exercised here.)
+    auto rad2deg = [](float r) { return r * 180.0f / static_cast<float>(M_PI); };
+
     std::array<float, 3> gyro_data = {0.0f,
                                       M_PI_2f, // half a turn (180 degrees)
                                       M_PIf};  // full turn (360 degrees)
-    joypad.set_motion(inputtino::PS5Joypad::GYROSCOPE, gyro_data[0], gyro_data[1], gyro_data[2]);
+    joypad.set_gyro(rad2deg(gyro_data[0]), rad2deg(gyro_data[1]), rad2deg(gyro_data[2]));
     std::this_thread::sleep_for(10ms);
 
     SDL_GameControllerUpdate();
@@ -287,7 +329,7 @@ TEST_CASE_METHOD(SDLTestsFixture, "PS Joypad", "[SDL],[PS]") {
         -M_PI_2f, // half a turn (180 degrees)
         -M_PIf    // full turn (360 degrees)
     };
-    joypad.set_motion(inputtino::PS5Joypad::GYROSCOPE, gyro_data[0], gyro_data[1], gyro_data[2]);
+    joypad.set_gyro(rad2deg(gyro_data[0]), rad2deg(gyro_data[1]), rad2deg(gyro_data[2]));
     std::this_thread::sleep_for(10ms);
 
     SDL_GameControllerUpdate();
@@ -306,7 +348,7 @@ TEST_CASE_METHOD(SDLTestsFixture, "PS Joypad", "[SDL],[PS]") {
 
     // Try out problematic values from https://github.com/LizardByte/Sunshine/issues/3247
     gyro_data = {-32769.0f, 32769.0f, -0.0004124999977648258f};
-    joypad.set_motion(inputtino::PS5Joypad::GYROSCOPE, gyro_data[0], gyro_data[1], gyro_data[2]);
+    joypad.set_gyro(rad2deg(gyro_data[0]), rad2deg(gyro_data[1]), rad2deg(gyro_data[2]));
     std::this_thread::sleep_for(10ms);
 
     SDL_GameControllerUpdate();
@@ -466,6 +508,44 @@ TEST_CASE("Bluetooth CRC32", "[PS]") {
   auto crc2 = CRC32(&PS_INPUT_CRC32_SEED, 1, 0xFFFFFFFF);
   crc2 = CRC32(reinterpret_cast<unsigned char *>(buffer.data()), buffer.length(), crc2);
   REQUIRE(crc2 == 0x9498b398);
+}
+
+TEST_CASE("Mac struct", "[Mac]") {
+  SECTION("generate returns unique MACs") {
+    auto m1 = *Mac::generate();
+    auto m2 = *Mac::generate();
+    auto m3 = *Mac::generate();
+    REQUIRE(m1 != m2);
+    REQUIRE(m2 != m3);
+    REQUIRE(m1 != m3);
+    // All use the inputtino prefix
+    REQUIRE(m1.bytes[0] == 0xAA);
+    REQUIRE(m1.bytes[1] == 0xBB);
+    REQUIRE(m1.bytes[2] == 0xCC);
+    REQUIRE(m1.bytes[3] == 0x00);
+  }
+
+  SECTION("parse and to_string round-trip") {
+    auto m = *Mac::parse("AB:CD:EF:01:23:45");
+    REQUIRE(m.to_string() == "ab:cd:ef:01:23:45");
+    REQUIRE(m.bytes[0] == 0xAB);
+    REQUIRE(m.bytes[5] == 0x45);
+  }
+
+  SECTION("matches is case-insensitive") {
+    auto m = *Mac::parse("aa:bb:cc:dd:ee:ff");
+    REQUIRE(m.matches("AA:BB:CC:DD:EE:FF"));
+    REQUIRE(m.matches("aa:bb:cc:dd:ee:ff"));
+    REQUIRE(m.matches("Aa:Bb:Cc:Dd:Ee:Ff"));
+    REQUIRE_FALSE(m.matches("00:00:00:00:00:00"));
+  }
+
+  SECTION("parse rejects malformed input") {
+    REQUIRE_FALSE(Mac::parse("not-a-mac"));
+    REQUIRE_FALSE(Mac::parse("aa:bb:cc:dd:ee"));
+    REQUIRE_FALSE(Mac::parse("aa:bb:cc:dd:ee:ff:00"));
+    REQUIRE_FALSE(Mac::parse("gg:bb:cc:dd:ee:ff"));
+  }
 }
 
 TEST_CASE("Test MAC address", "[PS]") {
