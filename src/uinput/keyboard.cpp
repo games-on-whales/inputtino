@@ -22,7 +22,6 @@ std::vector<std::string> Keyboard::get_nodes() const {
 
 Result<libevdev_uinput_ptr> create_keyboard(const DeviceDefinition &device) {
   auto dev = libevdev_new();
-  libevdev_uinput *uidev;
 
   libevdev_set_name(dev, device.name.c_str());
   libevdev_set_id_vendor(dev, device.vendor_id);
@@ -37,13 +36,9 @@ Result<libevdev_uinput_ptr> create_keyboard(const DeviceDefinition &device) {
     libevdev_enable_event_code(dev, EV_KEY, ev.second.linux_code, nullptr);
   }
 
-  auto err = libevdev_uinput_create_from_device(dev, LIBEVDEV_UINPUT_OPEN_MANAGED, &uidev);
+  auto result = create_uinput_device(dev, device);
   libevdev_free(dev);
-  if (err != 0) {
-    return Error(strerror(-err));
-  }
-
-  return libevdev_uinput_ptr{uidev, ::libevdev_uinput_destroy};
+  return result;
 }
 
 static std::optional<keyboard::KEY_MAP> press_btn(libevdev_uinput *kb, short key_code) {
