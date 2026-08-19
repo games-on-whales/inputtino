@@ -1,10 +1,13 @@
 #pragma once
 
 #include <cstring>
+#include <fcntl.h>
 #include <inputtino/input.hpp>
 #include <iostream>
 #include <libevdev/libevdev-uinput.h>
 #include <libevdev/libevdev.h>
+#include <linux/uinput.h>
+#include <sys/ioctl.h>
 #include <thread>
 #include <unistd.h>
 
@@ -12,6 +15,43 @@ namespace inputtino {
 
 using libevdev_uinput_ptr = std::shared_ptr<libevdev_uinput>;
 using libevdev_event_ptr = std::shared_ptr<input_event>;
+
+static Result<libevdev_uinput_ptr> create_uinput_device(libevdev *dev, const DeviceDefinition &device) {
+  int uinput_fd = LIBEVDEV_UINPUT_OPEN_MANAGED;
+  bool owns_uinput_fd = false;
+
+  if (!device.device_phys.empty()) {
+    uinput_fd = open("/dev/uinput", O_RDWR | O_NONBLOCK);
+    if (uinput_fd < 0) {
+      return Error("Failed to open /dev/uinput: " + std::string(strerror(errno)));
+    }
+    owns_uinput_fd = true;
+
+    if (ioctl(uinput_fd, UI_SET_PHYS, device.device_phys.c_str()) < 0) {
+      const auto error = "Failed to set uinput physical path: " + std::string(strerror(errno));
+      close(uinput_fd);
+      return Error(error);
+    }
+  }
+
+  libevdev_uinput *uidev;
+  const auto err = libevdev_uinput_create_from_device(dev, uinput_fd, &uidev);
+  if (err != 0) {
+    if (owns_uinput_fd) {
+      close(uinput_fd);
+    }
+    return Error(strerror(-err));
+  }
+
+  if (!owns_uinput_fd) {
+    return libevdev_uinput_ptr{uidev, ::libevdev_uinput_destroy};
+  }
+
+  return libevdev_uinput_ptr{uidev, [uinput_fd](libevdev_uinput *device) {
+                               libevdev_uinput_destroy(device);
+                               close(uinput_fd);
+                             }};
+}
 
 /**
  * Given a uinput fd will read all queued events available at this time up to max_events

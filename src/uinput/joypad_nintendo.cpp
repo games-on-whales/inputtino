@@ -23,7 +23,6 @@ std::vector<std::string> SwitchJoypad::get_nodes() const {
 
 Result<libevdev_uinput_ptr> create_nintendo_controller(const DeviceDefinition &device) {
   libevdev *dev = libevdev_new();
-  libevdev_uinput *uidev;
 
   libevdev_set_name(dev, device.name.c_str());
   libevdev_set_id_vendor(dev, device.vendor_id);
@@ -70,13 +69,9 @@ Result<libevdev_uinput_ptr> create_nintendo_controller(const DeviceDefinition &d
   libevdev_enable_event_code(dev, EV_FF, FF_RAMP, nullptr);
   libevdev_enable_event_code(dev, EV_FF, FF_GAIN, nullptr);
 
-  auto err = libevdev_uinput_create_from_device(dev, LIBEVDEV_UINPUT_OPEN_MANAGED, &uidev);
+  auto result = create_uinput_device(dev, device);
   libevdev_free(dev);
-  if (err != 0) {
-    return Error(strerror(-err));
-  }
-
-  return libevdev_uinput_ptr{uidev, ::libevdev_uinput_destroy};
+  return result;
 }
 
 SwitchJoypad::SwitchJoypad() : _state(std::make_shared<SwitchJoypadState>()) {}

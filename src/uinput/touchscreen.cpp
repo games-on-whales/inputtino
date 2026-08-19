@@ -23,7 +23,6 @@ static constexpr int PRESSURE_MAX = 253;
 
 Result<libevdev_uinput_ptr> create_touch_screen(const DeviceDefinition &device) {
   libevdev *dev = libevdev_new();
-  libevdev_uinput *uidev;
 
   libevdev_set_name(dev, device.name.c_str());
   libevdev_set_id_vendor(dev, device.vendor_id);
@@ -62,13 +61,9 @@ Result<libevdev_uinput_ptr> create_touch_screen(const DeviceDefinition &device) 
   // https://docs.kernel.org/input/event-codes.html#touchscreens
   libevdev_enable_property(dev, INPUT_PROP_DIRECT);
 
-  auto err = libevdev_uinput_create_from_device(dev, LIBEVDEV_UINPUT_OPEN_MANAGED, &uidev);
+  auto result = create_uinput_device(dev, device);
   libevdev_free(dev);
-  if (err != 0) {
-    return Error(strerror(-err));
-  }
-
-  return libevdev_uinput_ptr{uidev, ::libevdev_uinput_destroy};
+  return result;
 }
 
 TouchScreen::TouchScreen() : _state(std::make_shared<TouchScreenState>()) {}

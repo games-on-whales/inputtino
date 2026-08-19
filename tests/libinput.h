@@ -1,12 +1,14 @@
 #pragma once
 
+#include <fcntl.h>
+#include <filesystem>
+#include <fstream>
+#include <iostream>
 #include <libinput.h>
 #include <memory>
 #include <string>
-#include <vector>
 #include <unistd.h>
-#include <fcntl.h>
-#include <iostream>
+#include <vector>
 
 static int open_restricted(const char *path, int flags, void *user_data) {
     int fd = open(path, flags);
@@ -48,4 +50,12 @@ static std::shared_ptr<libinput_event> get_event(std::shared_ptr<libinput> li) {
     libinput_dispatch(li.get());
     struct libinput_event *event = libinput_get_event(li.get());
     return std::shared_ptr<libinput_event>(event, [](libinput_event *event) { libinput_event_destroy(event); });
+}
+
+static std::string get_device_phys(const std::string &node) {
+  const auto event_name = std::filesystem::path(node).filename();
+  std::ifstream phys_file(std::filesystem::path("/sys/class/input") / event_name / "device/phys");
+  std::string phys;
+  std::getline(phys_file, phys);
+  return phys;
 }

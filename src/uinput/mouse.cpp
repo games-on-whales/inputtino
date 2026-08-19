@@ -24,7 +24,6 @@ constexpr int ABS_MAX_HEIGHT = 12000;
 
 static Result<libevdev_uinput_ptr> create_mouse(const DeviceDefinition &device) {
   libevdev *dev = libevdev_new();
-  libevdev_uinput *uidev;
 
   libevdev_set_name(dev, device.name.c_str());
   libevdev_set_id_vendor(dev, device.vendor_id);
@@ -54,18 +53,13 @@ static Result<libevdev_uinput_ptr> create_mouse(const DeviceDefinition &device) 
   libevdev_enable_event_type(dev, EV_MSC);
   libevdev_enable_event_code(dev, EV_MSC, MSC_SCAN, nullptr);
 
-  auto err = libevdev_uinput_create_from_device(dev, LIBEVDEV_UINPUT_OPEN_MANAGED, &uidev);
+  auto result = create_uinput_device(dev, device);
   libevdev_free(dev);
-  if (err != 0) {
-    return Error(strerror(-err));
-  }
-
-  return libevdev_uinput_ptr{uidev, ::libevdev_uinput_destroy};
+  return result;
 }
 
 static Result<libevdev_uinput_ptr> create_mouse_abs(const DeviceDefinition &device) {
   libevdev *dev = libevdev_new();
-  libevdev_uinput *uidev;
 
   libevdev_set_name(dev, (device.name + " (absolute)").c_str());
   libevdev_set_id_vendor(dev, device.vendor_id);
@@ -103,13 +97,9 @@ static Result<libevdev_uinput_ptr> create_mouse_abs(const DeviceDefinition &devi
   absinfo.maximum = ABS_MAX_HEIGHT;
   libevdev_enable_event_code(dev, EV_ABS, ABS_Y, &absinfo);
 
-  auto err = libevdev_uinput_create_from_device(dev, LIBEVDEV_UINPUT_OPEN_MANAGED, &uidev);
+  auto result = create_uinput_device(dev, device);
   libevdev_free(dev);
-  if (err != 0) {
-    return Error(strerror(-err));
-  }
-
-  return libevdev_uinput_ptr{uidev, ::libevdev_uinput_destroy};
+  return result;
 }
 
 Mouse::Mouse() : _state(std::make_shared<MouseState>()) {}

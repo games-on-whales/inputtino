@@ -16,6 +16,48 @@ using namespace std::chrono_literals;
  * TESTS
  */
 
+TEST_CASE("virtual devices preserve the configured physical path", "[LIBINPUT]") {
+  const std::string expected_phys = "inputtino/test/device";
+  const DeviceDefinition device = {
+      .name = "inputtino physical path test",
+      .vendor_id = 0xAB00,
+      .product_id = 0xAB01,
+      .version = 0xAB00,
+      .device_phys = expected_phys,
+  };
+
+  SECTION("keyboard") {
+    auto keyboard = std::move(*Keyboard::create(device));
+    REQUIRE(keyboard.get_nodes().size() == 1);
+    REQUIRE(get_device_phys(keyboard.get_nodes()[0]) == expected_phys);
+  }
+
+  SECTION("relative and absolute mouse") {
+    auto mouse = std::move(*Mouse::create(device));
+    REQUIRE(mouse.get_nodes().size() == 2);
+    REQUIRE(get_device_phys(mouse.get_nodes()[0]) == expected_phys);
+    REQUIRE(get_device_phys(mouse.get_nodes()[1]) == expected_phys);
+  }
+
+  SECTION("touch screen") {
+    auto touch_screen = std::move(*TouchScreen::create(device));
+    REQUIRE(touch_screen.get_nodes().size() == 1);
+    REQUIRE(get_device_phys(touch_screen.get_nodes()[0]) == expected_phys);
+  }
+
+  SECTION("pen tablet") {
+    auto pen_tablet = std::move(*PenTablet::create(device));
+    REQUIRE(pen_tablet.get_nodes().size() == 1);
+    REQUIRE(get_device_phys(pen_tablet.get_nodes()[0]) == expected_phys);
+  }
+
+  SECTION("trackpad") {
+    auto trackpad = std::move(*Trackpad::create(device));
+    REQUIRE(trackpad.get_nodes().size() == 1);
+    REQUIRE(get_device_phys(trackpad.get_nodes()[0]) == expected_phys);
+  }
+}
+
 TEST_CASE("virtual keyboard", "[LIBINPUT]") {
     auto kb = std::move(*Keyboard::create());
     auto li = create_libinput_context(kb.get_nodes());
