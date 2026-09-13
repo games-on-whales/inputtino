@@ -3,14 +3,22 @@
 
 InputtinoPS5Joypad *inputtino_joypad_ps5_create(const InputtinoDeviceDefinition *device,
                                                 const InputtinoErrorHandler *eh) {
-  auto joypad_ = inputtino::PS5Joypad::create({
-      .name = device->name ? device->name : "Inputtino virtual device",
-      .vendor_id = device->vendor_id,
-      .product_id = device->product_id,
-      .version = device->version,
-      .device_phys = device->device_phys ? device->device_phys : "00:11:22:33:44:55",
-      .device_uniq = device->device_uniq ? device->device_uniq : "00:11:22:33:44:55",
-  });
+  return inputtino_joypad_ps5_create_with_connection(device, PS5_CONNECTION_BLUETOOTH, eh);
+}
+
+InputtinoPS5Joypad *inputtino_joypad_ps5_create_with_connection(const InputtinoDeviceDefinition *device,
+                                                                enum INPUTTINO_PS5_CONNECTION connection,
+                                                                const InputtinoErrorHandler *eh) {
+  auto joypad_ = inputtino::PS5Joypad::create(
+      {
+          .name = device->name ? device->name : "Inputtino virtual device",
+          .vendor_id = device->vendor_id,
+          .product_id = device->product_id,
+          .version = device->version,
+          .device_phys = device->device_phys ? device->device_phys : "00:11:22:33:44:55",
+          .device_uniq = device->device_uniq ? device->device_uniq : "00:11:22:33:44:55",
+      },
+      connection == PS5_CONNECTION_BLUETOOTH);
   if (joypad_) {
     return reinterpret_cast<InputtinoPS5Joypad *>(new inputtino::PS5Joypad(std::move(*joypad_)));
   } else {

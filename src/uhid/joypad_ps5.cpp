@@ -126,6 +126,16 @@ static void on_uhid_event(std::shared_ptr<PS5JoypadState> state, uhid_event ev, 
     // TODO: signal error somehow
     break;
   }
+  case UHID_SET_REPORT: {
+    // The kernel blocks the caller until this is answered (and fails it after a timeout), so acknowledge feature
+    // reports we don't act on; some DualSense clients refuse the pad if these writes fail.
+    uhid_event answer{};
+    answer.type = UHID_SET_REPORT_REPLY;
+    answer.u.set_report_reply.id = ev.u.set_report.id;
+    answer.u.set_report_reply.err = 0;
+    uhid::uhid_write(fd, &answer);
+    break;
+  }
   case UHID_OUTPUT: { // This is sent if the HID device driver wants to send raw data to the device
     // Here is where we'll get Rumble and LED events
     // Check the first byte to see if it's a USB or BT report
@@ -239,8 +249,7 @@ PS5Joypad::~PS5Joypad() {
   }
 }
 
-Result<PS5Joypad> PS5Joypad::create(const DeviceDefinition &device) {
-  bool use_bluetooth = true; // TODO: expose this
+Result<PS5Joypad> PS5Joypad::create(const DeviceDefinition &device, bool use_bluetooth) {
 
   auto def = uhid::DeviceDefinition{
       .name = device.name,
