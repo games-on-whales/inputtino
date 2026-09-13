@@ -91,7 +91,7 @@ PS5Joypad::~PS5Joypad() {
   }
 }
 
-Result<PS5Joypad> PS5Joypad::create(const DeviceDefinition &device) {
+Result<PS5Joypad> PS5Joypad::create(const DeviceDefinition &device, bool /* use_bluetooth */) {
   auto joy_el = create_ps_controller(device);
   if (!joy_el) {
     return Error(joy_el.getErrorMessage());

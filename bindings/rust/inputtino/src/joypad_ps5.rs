@@ -2,15 +2,16 @@ use inputtino_sys::{inputtino_joypad_ps5_place_finger, inputtino_joypad_ps5_rele
 use std::ffi::{c_int, c_void};
 use std::path::PathBuf;
 
-use crate::common::{get_nodes, make_device, DeviceDefinition};
+use crate::common::{get_nodes, make_device, make_device_with, DeviceDefinition};
 use crate::sys::{
-    inputtino_joypad_ps5_create, inputtino_joypad_ps5_destroy, inputtino_joypad_ps5_get_nodes,
+    inputtino_joypad_ps5_create, inputtino_joypad_ps5_create_with_connection,
+    inputtino_joypad_ps5_destroy, inputtino_joypad_ps5_get_nodes,
     inputtino_joypad_ps5_set_on_led, inputtino_joypad_ps5_set_on_rumble,
     inputtino_joypad_ps5_set_pressed_buttons, inputtino_joypad_ps5_set_stick,
     inputtino_joypad_ps5_set_triggers, inputtino_joypad_ps5_set_motion,
     inputtino_joypad_ps5_set_battery, inputtino_joypad_ps5_set_on_trigger_effect,
 };
-use crate::{BatteryState, InputtinoError, JoypadMotionType, JoypadStickPosition};
+use crate::{BatteryState, InputtinoError, JoypadMotionType, JoypadStickPosition, PS5Connection};
 
 /// Emulated PlayStation 5's DualSense joypad.
 pub struct PS5Joypad {
@@ -41,12 +42,29 @@ impl PS5Joypad {
     /// let device = inputtino::SwitchJoypad::new(&definition);
     /// ```
     pub fn new(device: &DeviceDefinition) -> Result<Self, InputtinoError> {
-        make_device(inputtino_joypad_ps5_create, device).map(|joypad| PS5Joypad {
+        make_device(inputtino_joypad_ps5_create, device).map(Self::from_raw)
+    }
+
+    /// Create a new emulated PS5 DualSense device presented over the given connection.
+    ///
+    /// [`PS5Joypad::new`] always uses Bluetooth.
+    pub fn new_with_connection(
+        device: &DeviceDefinition,
+        connection: PS5Connection,
+    ) -> Result<Self, InputtinoError> {
+        make_device_with(device, |def, eh| unsafe {
+            inputtino_joypad_ps5_create_with_connection(def, connection, eh)
+        })
+        .map(Self::from_raw)
+    }
+
+    fn from_raw(joypad: *mut crate::sys::InputtinoPS5Joypad) -> Self {
+        PS5Joypad {
             joypad,
             on_rumble_fn: std::ptr::null_mut(),
             on_led_fn: std::ptr::null_mut(),
             on_trigger_effect_fn: std::ptr::null_mut(),
-        })
+        }
     }
 
     /// Set the state of all buttons.

@@ -96,12 +96,20 @@ pub(crate) fn make_device<T>(
     f: CreateDeviceFn<T>,
     definition: &DeviceDefinition,
 ) -> Result<*mut T, InputtinoError> {
+    make_device_with(definition, |def, eh| unsafe { f(def, eh) })
+}
+
+/// Like [`make_device`], for constructors that take extra arguments.
+pub(crate) fn make_device_with<T>(
+    definition: &DeviceDefinition,
+    f: impl FnOnce(*const InputtinoDeviceDefinition, *const InputtinoErrorHandler) -> *mut T,
+) -> Result<*mut T, InputtinoError> {
     let mut error_str = std::ffi::CString::default();
     let error_handler = InputtinoErrorHandler {
         eh: Some(error_handler_fn),
         user_data: &mut error_str as *mut _ as *mut std::ffi::c_void,
     };
-    let device = unsafe { f(&definition.def, &error_handler) };
+    let device = f(&definition.def, &error_handler);
     if device.is_null() {
         let error_msg = error_str.to_string_lossy();
         Err(InputtinoError::Generic(format!(

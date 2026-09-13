@@ -378,9 +378,14 @@ private:
 
 class PS5Joypad : public Joypad {
 public:
+  /**
+   * @param use_bluetooth present the pad as a Bluetooth (true) or USB (false) DualSense; only the uhid backend honours
+   * this. Some consumers (e.g. Proton, which rewrites Bluetooth DualSense reports) only see full reports over USB.
+   */
   static Result<PS5Joypad>
   create(const DeviceDefinition &device = {
-             .name = "Wolf DualSense (virtual) pad", .vendor_id = 0x054C, .product_id = 0x0CE6, .version = 0x8111});
+             .name = "Wolf DualSense (virtual) pad", .vendor_id = 0x054C, .product_id = 0x0CE6, .version = 0x8111},
+         bool use_bluetooth = true);
   PS5Joypad(PS5Joypad &&j) noexcept : _state(nullptr) {
     std::swap(j._state, _state);
   }

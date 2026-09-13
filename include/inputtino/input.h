@@ -264,8 +264,19 @@ LIBINPUTTINO_EXPORT void inputtino_joypad_switch_destroy(InputtinoSwitchJoypad *
 struct InputtinoPS5Joypad;
 typedef struct InputtinoPS5Joypad InputtinoPS5Joypad;
 
+enum INPUTTINO_PS5_CONNECTION {
+  PS5_CONNECTION_BLUETOOTH,
+  PS5_CONNECTION_USB
+};
+
+/* Creates a Bluetooth DualSense, see inputtino_joypad_ps5_create_with_connection() */
 LIBINPUTTINO_EXPORT InputtinoPS5Joypad *inputtino_joypad_ps5_create(const InputtinoDeviceDefinition *device,
                                                        const InputtinoErrorHandler *eh);
+
+LIBINPUTTINO_EXPORT InputtinoPS5Joypad *
+inputtino_joypad_ps5_create_with_connection(const InputtinoDeviceDefinition *device,
+                                            enum INPUTTINO_PS5_CONNECTION connection,
+                                            const InputtinoErrorHandler *eh);
 
 LIBINPUTTINO_EXPORT char **inputtino_joypad_ps5_get_nodes(InputtinoPS5Joypad *joypad, int *num_nodes);
 
