@@ -2,9 +2,9 @@ name: Test Rust bindings
 
 on:
   push:
-    branches: [ "stable" ]
+    branches: [beta, stable]
   pull_request:
-    branches: [ "stable" ]
+    branches: [beta, stable]
 
 env:
   CARGO_TERM_COLOR: always

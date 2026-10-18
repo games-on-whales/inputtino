@@ -2,9 +2,9 @@ name: "Python: Lint / Format / Test / Type Check"
 
 on:
   push:
-    branches: [stable]
+    branches: [beta, stable]
   pull_request:
-    branches: [stable]
+    branches: [beta, stable]
 
 defaults:
   run:

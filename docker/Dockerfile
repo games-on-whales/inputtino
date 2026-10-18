@@ -1,4 +1,4 @@
-ARG BASE_IMAGE=ghcr.io/games-on-whales/base:edge
+ARG BASE_IMAGE=ghcr.io/games-on-whales/base:fedora-44
 
 ####################################
 FROM $BASE_IMAGE AS build-libinputtino
