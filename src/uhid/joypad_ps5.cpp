@@ -259,7 +259,7 @@ Result<PS5Joypad> PS5Joypad::create(const DeviceDefinition &device) {
     def.report_description = {&uhid::ps5_rdesc[0], &uhid::ps5_rdesc[0] + sizeof(uhid::ps5_rdesc)};
   }
 
-  auto mac = def.uniq.empty() ? Mac::generate() : Mac::parse(def.uniq);
+  auto mac = def.uniq.empty() ? Mac::generate() : Mac::claim(def.uniq);
   if (!mac) {
     return Error(mac.getErrorMessage());
   }

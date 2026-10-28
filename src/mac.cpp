@@ -6,6 +6,7 @@
 #include <mutex>
 #include <regex>
 #include <sstream>
+#include <thread>
 
 namespace inputtino {
 
@@ -86,6 +87,21 @@ Result<Mac> Mac::parse(const std::string &str) {
     mac.bytes[i] = static_cast<unsigned char>(v);
     if (i < 5)
       ss.ignore(1, ':');
+  }
+  return mac;
+}
+
+Result<Mac> Mac::claim(const std::string &str, std::chrono::milliseconds timeout) {
+  auto mac = parse(str);
+  if (!mac) {
+    return mac;
+  }
+  auto deadline = std::chrono::steady_clock::now() + timeout;
+  while (is_active_on_system(*mac)) {
+    if (std::chrono::steady_clock::now() >= deadline) {
+      return Error("MAC address " + (*mac).to_string() + " is still in use by another device");
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
   }
   return mac;
 }

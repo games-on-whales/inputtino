@@ -518,3 +518,28 @@ TEST_CASE("Test MAC address", "[PS]") {
   std::this_thread::sleep_for(50ms);
   REQUIRE_THAT(joypad.get_mac_address(), Equals("aa:00:cc:11:ee:22"));
 }
+
+TEST_CASE("Reuse a caller-supplied MAC address", "[PS]") {
+  DeviceDefinition def = {.name = "Wolf DualSense (virtual) pad",
+                          .vendor_id = 0x054C,
+                          .product_id = 0x0CE6,
+                          .version = 0x8111,
+                          .device_uniq = "AA:00:CC:11:EE:33"};
+
+  REQUIRE_FALSE(Mac::claim("not-a-mac"));
+  REQUIRE(Mac::claim(def.device_uniq));
+
+  {
+    auto joypad = std::move(*PS5Joypad::create(def));
+    std::this_thread::sleep_for(50ms);
+
+    // The address is taken while the first pad is alive, a second pad can't get it
+    REQUIRE_FALSE(Mac::claim(def.device_uniq, 50ms));
+    REQUIRE_FALSE(PS5Joypad::create(def));
+  }
+
+  // Re-creating right after the previous pad is gone keeps the same identity
+  auto joypad = std::move(*PS5Joypad::create(def));
+  std::this_thread::sleep_for(50ms);
+  REQUIRE_THAT(joypad.get_mac_address(), Equals("aa:00:cc:11:ee:33"));
+}

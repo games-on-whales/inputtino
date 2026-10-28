@@ -26,6 +26,11 @@ struct DeviceDefinition {
   uint16_t version;
 
   std::string device_phys = "";
+  /**
+   * Unique id of the device; for UHID pads this is their (Bluetooth) MAC address.
+   * Leave empty to get a freshly generated address on every create, or pass the
+   * same address every time to keep a stable identity across re-creates.
+   */
   std::string device_uniq = "";
 };
 
