@@ -2,8 +2,8 @@
 
 #include <algorithm>
 #include <cstring>
-#include <inputtino/protected_types.hpp>
 #include <inputtino/keyboard.hpp>
+#include <inputtino/protected_types.hpp>
 #include <thread>
 
 namespace inputtino {
@@ -63,7 +63,11 @@ Keyboard::Keyboard() : _state(std::make_shared<KeyboardState>()) {}
 
 Keyboard::~Keyboard() {
   if (_state) {
-    _state->stop_repeat_thread = true;
+    {
+      std::lock_guard lock(_state->mtx);
+      _state->stop_repeat_thread = true;
+    }
+    _state->stop_cv.notify_all();
     if (_state->repeat_press_t.joinable()) {
       _state->repeat_press_t.join();
     }
@@ -75,9 +79,11 @@ Result<Keyboard> Keyboard::create(const DeviceDefinition &device, int millis_rep
   if (kb_el) {
     Keyboard kb;
     kb._state->kb = std::move(*kb_el);
-    auto repeat_thread = std::thread([state = kb._state, millis_repress_key]() {
-      while (!state->stop_repeat_thread) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(millis_repress_key));
+    kb._state->repeat_press_t = std::thread([state = kb._state, millis_repress_key]() {
+      std::unique_lock lock(state->mtx);
+      while (!state->stop_cv.wait_for(lock, std::chrono::milliseconds(millis_repress_key), [&state] {
+        return state->stop_repeat_thread;
+      })) {
         for (auto key : state->cur_press_keys) {
           if (auto keyboard = state->kb.get()) {
             press_btn(keyboard, key);
@@ -85,8 +91,6 @@ Result<Keyboard> Keyboard::create(const DeviceDefinition &device, int millis_rep
         }
       }
     });
-    kb._state->repeat_press_t = std::move(repeat_thread);
-    kb._state->repeat_press_t.detach();
     return kb;
   } else {
     return Error(kb_el.getErrorMessage());
@@ -95,6 +99,7 @@ Result<Keyboard> Keyboard::create(const DeviceDefinition &device, int millis_rep
 
 void Keyboard::press(short key_code) {
   if (auto keyboard = _state->kb.get()) {
+    std::lock_guard lock(_state->mtx);
     if (auto key = press_btn(keyboard, key_code)) {
       _state->cur_press_keys.push_back(key_code);
     }
@@ -106,6 +111,7 @@ void Keyboard::release(short key_code) {
   if (search_key != keyboard::key_mappings.end()) {
     if (auto keyboard = _state->kb.get()) {
       auto mapped_key = search_key->second;
+      std::lock_guard lock(_state->mtx);
       this->_state->cur_press_keys.erase(
           std::remove(this->_state->cur_press_keys.begin(), this->_state->cur_press_keys.end(), key_code),
           this->_state->cur_press_keys.end());
