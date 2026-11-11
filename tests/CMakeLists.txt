@@ -15,6 +15,9 @@ add_executable(inputtino_tests main.cpp)
 set(SRC_LIST main.cpp testCAPI.cpp)
 
 if (UNIX AND NOT APPLE)
+    # Runtime factory / backend-selection / udev tests (no SDL or libinput needed)
+    list(APPEND SRC_LIST "testFactory.cpp")
+
     option(TEST_LIBINPUT "Enable libinput test" ON)
     if (TEST_LIBINPUT)
         find_package(PkgConfig)
