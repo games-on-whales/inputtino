@@ -1,10 +1,12 @@
 #pragma once
 
+#include <condition_variable>
 #include <cstring>
 #include <inputtino/input.hpp>
 #include <iostream>
 #include <libevdev/libevdev-uinput.h>
 #include <libevdev/libevdev.h>
+#include <mutex>
 #include <thread>
 #include <unistd.h>
 
@@ -53,8 +55,12 @@ struct SwitchJoypadState : BaseJoypadState {};
 
 struct KeyboardState {
   std::thread repeat_press_t;
-  bool stop_repeat_thread = false;
   libevdev_uinput_ptr kb = nullptr;
+
+  /* Guards stop_repeat_thread and cur_press_keys, shared with repeat_press_t */
+  std::mutex mtx;
+  std::condition_variable stop_cv;
+  bool stop_repeat_thread = false;
   std::vector<short> cur_press_keys = {};
 };
 
