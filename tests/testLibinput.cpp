@@ -45,6 +45,21 @@ TEST_CASE("virtual keyboard", "[LIBINPUT]") {
     }
 }
 
+TEST_CASE("virtual keyboard media keys", "[LIBINPUT]") {
+    auto kb = std::move(*Keyboard::create());
+    auto li = create_libinput_context(kb.get_nodes());
+    auto event = get_event(li);
+    REQUIRE(libinput_event_get_type(event.get()) == LIBINPUT_EVENT_DEVICE_ADDED);
+    auto device = libinput_event_get_device(event.get());
+
+    // Windows VK_BROWSER_BACK (0xA6) to VK_MEDIA_PLAY_PAUSE (0xB3)
+    for (auto linux_code : {KEY_BACK, KEY_FORWARD, KEY_REFRESH, KEY_STOP, KEY_SEARCH, KEY_BOOKMARKS, KEY_HOMEPAGE,
+                            KEY_MUTE, KEY_VOLUMEDOWN, KEY_VOLUMEUP, KEY_NEXTSONG, KEY_PREVIOUSSONG, KEY_STOPCD,
+                            KEY_PLAYPAUSE}) {
+        REQUIRE(libinput_device_keyboard_has_key(device, linux_code) == 1);
+    }
+}
+
 TEST_CASE("virtual mouse relative", "[LIBINPUT]") {
     auto mouse = std::move(*Mouse::create());
     auto li = create_libinput_context({mouse.get_nodes()[0]});
