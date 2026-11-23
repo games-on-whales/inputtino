@@ -1,4 +1,5 @@
 #pragma once
+#include <array>
 #include <functional>
 #include <inputtino/input.hpp>
 #include <optional>
@@ -27,8 +28,9 @@ struct PS5JoypadState {
   std::optional<std::function<void(int, int)>> on_rumble = std::nullopt;
   std::optional<std::function<void(int, int, int)>> on_led = std::nullopt;
   std::optional<std::function<void(const PS5Joypad::TriggerEffect &)>> on_trigger_effect = std::nullopt;
-  uint32_t last_left_trigger_event = 0;
-  uint32_t last_right_trigger_event = 0;
+  // Last effect forwarded per side (type byte + 10 param bytes); empty until the first one.
+  std::optional<std::array<uint8_t, 11>> last_left_trigger_event = std::nullopt;
+  std::optional<std::array<uint8_t, 11>> last_right_trigger_event = std::nullopt;
 
   bool stop_repeat_thread = false;
   bool is_bluetooth = true;

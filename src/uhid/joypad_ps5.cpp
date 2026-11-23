@@ -179,15 +179,18 @@ static void on_uhid_event(std::shared_ptr<PS5JoypadState> state, uhid_event ev, 
       auto right_array_start = std::begin(report.right_trigger_effect);
       auto right_array_end = std::end(report.right_trigger_effect);
       // We have to cache these values because these flags will be set as long as the effect is active
-      uint32_t left_trigger_hash = std::accumulate(left_array_start, left_array_end, 0ul);
-      uint32_t right_trigger_hash = std::accumulate(right_array_start, right_array_end, 0ul);
-      if ((left_trigger && state->last_left_trigger_event != left_trigger_hash) ||
-          (right_trigger && state->last_right_trigger_event != right_trigger_hash)) {
+      // Compare the whole effect (type + params): a byte sum collides for different effects.
+      std::array<uint8_t, 11> left_effect{report.left_trigger_effect_type};
+      std::array<uint8_t, 11> right_effect{report.right_trigger_effect_type};
+      std::copy(left_array_start, left_array_end, left_effect.begin() + 1);
+      std::copy(right_array_start, right_array_end, right_effect.begin() + 1);
+      if ((left_trigger && state->last_left_trigger_event != left_effect) ||
+          (right_trigger && state->last_right_trigger_event != right_effect)) {
         // First, update the cache
         if (left_trigger)
-          state->last_left_trigger_event = left_trigger_hash;
+          state->last_left_trigger_event = left_effect;
         if (right_trigger)
-          state->last_right_trigger_event = right_trigger_hash;
+          state->last_right_trigger_event = right_effect;
 
         // Then, trigger the event
         uint8_t event_flags = (report.valid_flag0 & uhid::LEFT_TRIGGER_EFFECT) |
