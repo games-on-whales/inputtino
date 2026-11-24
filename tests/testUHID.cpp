@@ -1,4 +1,5 @@
 #include "catch2/catch_all.hpp"
+#include <atomic>
 #include <crc32.hpp>
 #include <filesystem>
 #include <fstream>
@@ -452,6 +453,62 @@ TEST_CASE_METHOD(SDLTestsFixture, "PS Joypad", "[SDL],[PS]") {
     SDL_GameController *gc2 = SDL_GameControllerOpen(1);
     REQUIRE(SDL_GameControllerGetType(gc2) == SDL_CONTROLLER_TYPE_PS5);
     SDL_GameControllerClose(gc2);
+  }
+
+  SDL_GameControllerClose(gc);
+}
+
+TEST_CASE_METHOD(SDLTestsFixture, "PS Joypad trigger effect de-duplication", "[SDL],[PS]") {
+  auto joypad = std::move(*PS5Joypad::create());
+  std::this_thread::sleep_for(50ms);
+  flush_sdl_events();
+  SDL_GameController *gc = SDL_GameControllerOpen(0);
+  REQUIRE(gc);
+
+  auto n_events = std::make_shared<std::atomic<int>>(0);
+  auto trigger_event = std::make_shared<PS5Joypad::TriggerEffect>();
+  joypad.set_on_trigger_effect([n_events, trigger_event](const PS5Joypad::TriggerEffect &effect) {
+    *trigger_event = effect;
+    (*n_events)++;
+  });
+
+  auto send_right_effect = [gc](uint8_t type, std::array<uint8_t, 10> params) {
+    uhid::dualsense_output_report_common state = {};
+    state.valid_flag0 = uhid::RIGHT_TRIGGER_EFFECT;
+    state.right_trigger_effect_type = type;
+    std::copy(params.begin(), params.end(), std::begin(state.right_trigger_effect));
+    SDL_GameControllerSendEffect(gc, &state, sizeof(state));
+    std::this_thread::sleep_for(50ms);
+    flush_sdl_events();
+  };
+
+  SECTION("First effect with all-zero params") {
+    send_right_effect(0x05, {});
+    REQUIRE(*n_events == 1);
+    REQUIRE(trigger_event->type_right == 0x05);
+  }
+
+  SECTION("Different params with the same byte sum") {
+    send_right_effect(0x01, {0, 110});
+    REQUIRE(*n_events == 1);
+    send_right_effect(0x01, {110, 0});
+    REQUIRE(*n_events == 2);
+    REQUIRE(trigger_event->right[0] == 110);
+  }
+
+  SECTION("Same params with a different type") {
+    send_right_effect(0x01, {0, 110});
+    REQUIRE(*n_events == 1);
+    send_right_effect(0x02, {0, 110});
+    REQUIRE(*n_events == 2);
+    REQUIRE(trigger_event->type_right == 0x02);
+  }
+
+  SECTION("Repeated identical effect") {
+    send_right_effect(0x01, {0, 110});
+    REQUIRE(*n_events == 1);
+    send_right_effect(0x01, {0, 110});
+    REQUIRE(*n_events == 1);
   }
 
   SDL_GameControllerClose(gc);
