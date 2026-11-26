@@ -7,7 +7,9 @@
 #include <fstream>
 #include <inputtino/input.hpp>
 #include <iomanip>
+#include <iostream>
 #include <random>
+#include <udev_helpers.hpp>
 #include <uhid/protected_types.hpp>
 #include <uhid/ps5.hpp>
 #include <uhid/uhid.hpp>
@@ -239,6 +241,9 @@ PS5Joypad::~PS5Joypad() {
   }
 }
 
+static std::vector<std::string>
+find_sys_nodes(const std::string &target_mac, uint16_t vendor_id, bool report_missing);
+
 Result<PS5Joypad> PS5Joypad::create(const DeviceDefinition &device) {
   bool use_bluetooth = true; // TODO: expose this
 
@@ -287,14 +292,26 @@ Result<PS5Joypad> PS5Joypad::create(const DeviceDefinition &device) {
     joypad._state->is_bluetooth = use_bluetooth;
     joypad._state->dev = std::make_shared<uhid::Device>(std::move(*dev));
 
-    // Readers will expect frequent events event if the state hasn't changed
+    // Readers will expect frequent events event if the state hasn't changed.
+    // Not detached: the destructor joins it before destroying the device it writes to.
     joypad._send_input_thread = std::thread([state = joypad._state]() {
       while (!state->stop_repeat_thread) {
         send_report(*state);
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
       }
     });
-    joypad._send_input_thread.detach();
+
+    // Return once the kernel driver has exposed the input nodes, so that get_nodes() and get_udev_events()
+    // right after create() see all of them. That usually takes a few ms.
+    const auto mac_address = joypad.get_mac_address();
+    for (int attempt = 0; find_sys_nodes(mac_address, device.vendor_id, false).empty(); attempt++) {
+      if (attempt == 20) {
+        std::cerr << "inputtino: the input nodes of DualSense " << mac_address << " didn't appear within 1s"
+                  << std::endl;
+        break;
+      }
+      std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    }
 
     return joypad;
   }
@@ -328,17 +345,17 @@ std::string PS5Joypad::get_mac_address() const {
  * @returns a list of paths to the created input devices ex:
  * /sys/devices/virtual/misc/uhid/0003:054C:0CE6.000D/input/input58/
  */
-std::vector<std::string> PS5Joypad::get_sys_nodes() const {
+static std::vector<std::string>
+find_sys_nodes(const std::string &target_mac, uint16_t vendor_id, bool report_missing) {
   std::vector<std::string> nodes;
   auto base_path = "/sys/devices/virtual/misc/uhid/";
-  auto target_mac = get_mac_address();
   if (std::filesystem::exists(base_path)) {
     auto uhid_entries = std::filesystem::directory_iterator{base_path};
     for (auto uhid_entry : uhid_entries) {
       // Here we are looking for a directory that has a name like {BUS_ID}:{VENDOR_ID}:{PRODUCT_ID}.xxxx
       // (ex: 0003:054C:0CE6.000D)
       auto uhid_candidate_path = uhid_entry.path().filename().string();
-      auto target_id = to_hex(this->_state->vendor_id);
+      auto target_id = to_hex(vendor_id);
       if (uhid_entry.is_directory() && uhid_candidate_path.find(target_id) != std::string::npos) {
         // Found a match! Let's scan the input devices in that directory
         if (std::filesystem::exists(uhid_entry.path() / "input")) {
@@ -356,20 +373,24 @@ std::vector<std::string> PS5Joypad::get_sys_nodes() const {
                 if (line == target_mac) {
                   nodes.push_back(dev_entry.path().string());
                 }
-              } else {
+              } else if (report_missing) {
                 fprintf(stderr, "Unable to get joypad nodes, path %s does not exist\n", dev_uniq_path.string().c_str());
               }
             }
           }
-        } else {
+        } else if (report_missing) {
           fprintf(stderr, "Unable to get joypad nodes, path %s does not exist\n", uhid_entry.path().string().c_str());
         }
       }
     }
-  } else {
+  } else if (report_missing) {
     fprintf(stderr, "Unable to get joypad nodes, path %s does not exist\n", base_path);
   }
   return nodes;
+}
+
+std::vector<std::string> PS5Joypad::get_sys_nodes() const {
+  return find_sys_nodes(get_mac_address(), _state->vendor_id, true);
 }
 
 std::vector<std::string> PS5Joypad::get_nodes() const {
@@ -575,6 +596,117 @@ void PS5Joypad::release_finger(int finger_nr) {
     this->_state->current_state.points[finger_nr].contact = 1;
     send_report(*this->_state);
   }
+}
+
+std::vector<Joypad::UdevEvent> PS5Joypad::get_udev_events() const {
+  std::vector<Joypad::UdevEvent> events;
+
+  auto sys_nodes = this->get_sys_nodes();
+  for (const auto &sys_entry : sys_nodes) {
+    for (const auto &sys_node : std::filesystem::directory_iterator{sys_entry}) {
+      auto fname = sys_node.path().filename().string();
+      if (sys_node.is_directory() &&
+          (fname.rfind("event", 0) == 0 || fname.rfind("mouse", 0) == 0 || fname.rfind("js", 0) == 0)) {
+        auto sys_path = sys_node.path().string();
+        sys_path.erase(0, 4); // strip leading /sys
+        auto dev_path = ("/dev/input/" / sys_node.path().filename()).string();
+        auto event = gen_udev_base_event(dev_path, sys_path);
+
+        // The device name tells us whether this node is the touchpad, the motion
+        // sensor or the pad itself.
+        std::ifstream name_file(std::filesystem::path(sys_entry) / "name");
+        std::string name;
+        std::getline(name_file, name);
+        if (name.find("Touchpad") != std::string::npos) {
+          event["ID_INPUT_TOUCHPAD"] = "1";
+          event[".INPUT_CLASS"] = "mouse";
+          event["ID_INPUT_TOUCHPAD_INTEGRATION"] = "internal";
+        } else if (name.find("Motion") != std::string::npos) {
+          event["ID_INPUT_ACCELEROMETER"] = "1";
+          event["ID_INPUT_WIDTH_MM"] = "8";
+          event["ID_INPUT_HEIGHT_MM"] = "8";
+          event["IIO_SENSOR_PROXY_TYPE"] = "input-accel";
+          event["SYSTEMD_WANTS"] = "iio-sensor-proxy.service";
+          event["UNIQ"] = this->get_mac_address();
+        } else {
+          event["ID_INPUT_JOYSTICK"] = "1";
+          event[".INPUT_CLASS"] = "joystick";
+          event["UNIQ"] = this->get_mac_address();
+        }
+        events.emplace_back(event);
+      }
+    }
+  }
+
+  if (!sys_nodes.empty()) {
+    // Add the /dev/hidraw* node (used by Steam to access LED status etc.).
+    auto base_path = std::filesystem::path(sys_nodes[0]).parent_path().parent_path();
+    if (std::filesystem::exists(base_path / "hidraw")) {
+      for (const auto &hidraw_entry : std::filesystem::directory_iterator{base_path / "hidraw"}) {
+        auto dev_path = "/dev/" + hidraw_entry.path().filename().string();
+        auto sys_path = hidraw_entry.path().string();
+        sys_path.erase(0, 4); // strip leading /sys
+        auto event = gen_udev_base_event(dev_path, sys_path);
+        event["SUBSYSTEM"] = "hidraw";
+        events.emplace_back(event);
+      }
+    } else {
+      std::cerr << "inputtino: unable to find HIDRAW nodes for PS5 joypad under " << base_path.string() << std::endl;
+    }
+  }
+
+  return events;
+}
+
+std::vector<Joypad::UdevHwDbEntry> PS5Joypad::get_udev_hw_db_entries() const {
+  std::vector<Joypad::UdevHwDbEntry> result;
+
+  for (const auto &sys_entry : this->get_sys_nodes()) {
+    for (const auto &sys_node : std::filesystem::directory_iterator{sys_entry}) {
+      auto fname = sys_node.path().filename().string();
+      if (sys_node.is_directory() &&
+          (fname.rfind("event", 0) == 0 || fname.rfind("js", 0) == 0 || fname.rfind("mouse", 0) == 0)) {
+        auto dev_path = ("/dev/input/" / sys_node.path().filename()).string();
+        Joypad::UdevHwDbEntry entry;
+        entry.first = gen_udev_hw_db_filename(dev_path);
+
+        std::ifstream name_file(std::filesystem::path(sys_entry) / "name");
+        std::string name;
+        std::getline(name_file, name);
+        if (name.find("Touchpad") != std::string::npos) {
+          entry.second = {"E:ID_INPUT=1",
+                          "E:ID_INPUT_TOUCHPAD=1",
+                          "E:ID_BUS=usb",
+                          "G:seat",
+                          "G:uaccess",
+                          "Q:seat",
+                          "Q:uaccess",
+                          "V:1"};
+        } else if (name.find("Motion") != std::string::npos) {
+          entry.second = {"E:ID_INPUT=1",
+                          "E:ID_INPUT_ACCELEROMETER=1",
+                          "E:ID_BUS=usb",
+                          "G:seat",
+                          "G:uaccess",
+                          "Q:seat",
+                          "Q:uaccess",
+                          "V:1"};
+        } else {
+          entry.second = {"E:ID_INPUT=1",
+                          "E:ID_INPUT_JOYSTICK=1",
+                          "E:ID_BUS=usb",
+                          "G:seat",
+                          "G:uaccess",
+                          "Q:seat",
+                          "Q:uaccess",
+                          "V:1"};
+        }
+        result.emplace_back(entry);
+      }
+    }
+  }
+
+  return result;
 }
 
 } // namespace inputtino

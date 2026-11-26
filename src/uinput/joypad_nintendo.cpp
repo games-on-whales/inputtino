@@ -21,6 +21,14 @@ std::vector<std::string> SwitchJoypad::get_nodes() const {
   return nodes;
 }
 
+std::vector<Joypad::UdevEvent> SwitchJoypad::get_udev_events() const {
+  return gen_joystick_udev_events(_state);
+}
+
+std::vector<Joypad::UdevHwDbEntry> SwitchJoypad::get_udev_hw_db_entries() const {
+  return gen_joystick_udev_hw_db(_state);
+}
+
 Result<libevdev_uinput_ptr> create_nintendo_controller(const DeviceDefinition &device) {
   libevdev *dev = libevdev_new();
   libevdev_uinput *uidev;

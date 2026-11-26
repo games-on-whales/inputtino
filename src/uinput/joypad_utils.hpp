@@ -1,5 +1,6 @@
 #pragma once
 #include <algorithm>
+#include <udev_helpers.hpp>
 #include <chrono>
 #include <cstring>
 #include <fcntl.h>
@@ -241,6 +242,40 @@ static void event_listener(const std::shared_ptr<BaseJoypadState> &state) {
       }
     }
   }
+}
+
+// udev metadata of a uinput joypad: an "add" event per child node, tagged as a
+// joystick, and a hwdb entry for the main node.
+inline std::vector<Joypad::UdevEvent> gen_joystick_udev_events(const std::shared_ptr<BaseJoypadState> &state) {
+  std::vector<Joypad::UdevEvent> events;
+  if (auto joy = state->joy.get()) {
+    std::string base_syspath = libevdev_uinput_get_syspath(joy);
+    base_syspath.erase(0, 4); // strip leading /sys
+    for (const auto &devnode : get_child_dev_nodes(joy)) {
+      auto syspath = base_syspath + "/" + std::filesystem::path(devnode).filename().string();
+      auto event = gen_udev_base_event(devnode, syspath);
+      event["ID_INPUT_JOYSTICK"] = "1";
+      event[".INPUT_CLASS"] = "joystick";
+      events.emplace_back(event);
+    }
+  }
+  return events;
+}
+
+inline std::vector<Joypad::UdevHwDbEntry> gen_joystick_udev_hw_db(const std::shared_ptr<BaseJoypadState> &state) {
+  std::vector<Joypad::UdevHwDbEntry> result;
+  if (auto joy = state->joy.get()) {
+    result.push_back({gen_udev_hw_db_filename(libevdev_uinput_get_devnode(joy)),
+                      {"E:ID_INPUT=1",
+                       "E:ID_INPUT_JOYSTICK=1",
+                       "E:ID_BUS=usb",
+                       "G:seat",
+                       "G:uaccess",
+                       "Q:seat",
+                       "Q:uaccess",
+                       "V:1"}});
+  }
+  return result;
 }
 
 } // namespace inputtino

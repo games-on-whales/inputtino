@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <functional>
 #include <inputtino/result.hpp>
@@ -9,13 +10,47 @@
 #include <random>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 namespace inputtino {
 
+/**
+ * Whether this process can create uhid devices, i.e. whether `/dev/uhid` opens
+ * read-write. uhid is what the full DualSense (PS5Joypad: touchpad, motion,
+ * LED, adaptive triggers) needs; without it only the uinput pads work.
+ *
+ * The probe runs once and its result is cached for the process. It only tells
+ * that the node opens: the kernel can still refuse to create a device later
+ * (e.g. a seccomp or LSM policy), which is why Joypad::create() falls back to
+ * uinput when creating the uhid pad fails.
+ */
+bool is_uhid_supported();
+
 class VirtualDevice {
 public:
   virtual std::vector<std::string> get_nodes() const = 0;
+
+  /**
+   * The udev metadata for this device's nodes: one event per node (what udev
+   * would broadcast for it) and the matching hwdb entries.
+   *
+   * A device created through uinput/uhid has no udev database entry, so a
+   * consumer that runs apps in their own namespace (e.g. a container) can
+   * replay these to make libudev/SDL there see it like real hardware. The
+   * library created the device, so it knows its nodes and identity.
+   *
+   * Both default to empty for devices that don't provide them.
+   */
+  using UdevEvent = std::map<std::string, std::string>;
+  using UdevHwDbEntry = std::pair<std::string /* filename */, std::vector<std::string> /* rows */>;
+  virtual std::vector<UdevEvent> get_udev_events() const {
+    return {};
+  }
+  virtual std::vector<UdevHwDbEntry> get_udev_hw_db_entries() const {
+    return {};
+  }
+
   virtual ~VirtualDevice() = default;
 };
 
@@ -269,6 +304,16 @@ private:
  */
 class Joypad : public VirtualDevice {
 public:
+  /**
+   * Which kind of pad Joypad::create() should build; the concrete uhid/uinput
+   * backend is then chosen at runtime.
+   */
+  enum class TYPE {
+    XBOX,
+    PS,
+    NINTENDO
+  };
+
   enum CONTROLLER_BTN : unsigned int {
     DPAD_UP = 0x0001,
     DPAD_DOWN = 0x0002,
@@ -304,6 +349,33 @@ public:
   };
 
   /**
+   * Creates a joypad of the given kind and returns it through this base class,
+   * so the caller doesn't need to know which concrete class it got.
+   *
+   * For TYPE::PS the backend is picked at runtime: with `prefer_uhid` set (and
+   * the library built with USE_UHID) this tries the uhid PS5Joypad first, and
+   * falls back to the uinput PS5JoypadUinput if that can't be created (no
+   * /dev/uhid, or the kernel refuses it); a fallback is reported on stderr.
+   * TYPE::XBOX and TYPE::NINTENDO are always uinput.
+   *
+   * NOTE: when `prefer_uhid` is left out it defaults to is_uhid_supported(),
+   * which probes /dev/uhid. Pass it explicitly to decide yourself.
+   *
+   * The pad's own capabilities (motion, touchpad, LED, ...) are reachable
+   * through the virtuals below; on a pad without them they do nothing.
+   */
+  static Result<std::unique_ptr<Joypad>> create(TYPE kind, bool prefer_uhid = is_uhid_supported());
+  static Result<std::unique_ptr<Joypad>>
+  create(TYPE kind, const DeviceDefinition &device, bool prefer_uhid = is_uhid_supported());
+
+  /**
+   * The device identity (name, vendor, product, version) a pad of this TYPE
+   * gets by default, so a caller can change a single field (e.g. device_uniq)
+   * without repeating the ids.
+   */
+  static DeviceDefinition default_definition(TYPE kind);
+
+  /**
    * Given the nature of joypads we (might) have to simultaneously press and release multiple buttons.
    * In order to implement this, you can pass a single short: button_flags which represent the currently pressed
    * buttons in the joypad.
@@ -317,90 +389,19 @@ public:
   virtual void set_triggers(int16_t left, int16_t right) = 0;
 
   virtual void set_stick(STICK_POSITION stick_type, short x, short y) = 0;
-};
 
-class XboxOneJoypad : public Joypad {
-public:
-  static Result<XboxOneJoypad>
-  create(const DeviceDefinition &device = {
-             .name = "Wolf X-Box One (virtual) pad",
-             // https://github.com/torvalds/linux/blob/master/drivers/input/joystick/xpad.c#L147
-             .vendor_id = 0x045E,
-             .product_id = 0x02EA,
-             .version = 0x0408});
-  XboxOneJoypad(XboxOneJoypad &&j) noexcept : _state(nullptr) {
-    std::swap(j._state, _state);
+  /*
+   * Everything below is optional: the defaults do nothing, and the pads that
+   * support a feature override it. The types used to live in PS5Joypad and
+   * are still reachable through it (e.g. PS5Joypad::GYROSCOPE).
+   */
+
+  virtual void set_on_rumble(const std::function<void(int low_freq, int high_freq)> & /* callback */) {}
+
+  /** Whether set_motion() reaches the host, so a caller knows whether to ask the client for sensor data. */
+  virtual bool supports_motion() const {
+    return false;
   }
-  ~XboxOneJoypad() override;
-
-  std::vector<std::string> get_nodes() const override;
-
-  void set_pressed_buttons(unsigned int newly_pressed) override;
-  void set_triggers(int16_t left, int16_t right) override;
-  void set_stick(STICK_POSITION stick_type, short x, short y) override;
-  void set_on_rumble(const std::function<void(int low_freq, int high_freq)> &callback);
-
-protected:
-  typedef struct XboxOneJoypadState XboxOneJoypadState;
-  std::shared_ptr<XboxOneJoypadState> _state;
-
-private:
-  XboxOneJoypad();
-};
-
-class SwitchJoypad : public Joypad {
-public:
-  static Result<SwitchJoypad> create(const DeviceDefinition &device = {
-                                         .name = "Wolf Nintendo (virtual) pad",
-                                         // https://github.com/torvalds/linux/blob/master/drivers/hid/hid-ids.h#L981
-                                         .vendor_id = 0x057e,
-                                         .product_id = 0x2009,
-                                         .version = 0x8111});
-  SwitchJoypad(SwitchJoypad &&j) : _state(nullptr) {
-    std::swap(j._state, _state);
-  }
-  ~SwitchJoypad() override;
-
-  std::vector<std::string> get_nodes() const override;
-
-  void set_pressed_buttons(unsigned int newly_pressed) override;
-  void set_triggers(int16_t left, int16_t right) override;
-  void set_stick(STICK_POSITION stick_type, short x, short y) override;
-  void set_on_rumble(const std::function<void(int low_freq, int high_freq)> &callback);
-
-protected:
-  typedef struct XboxOneJoypadState SwitchJoypadState;
-  std::shared_ptr<SwitchJoypadState> _state;
-
-private:
-  SwitchJoypad();
-};
-
-class PS5Joypad : public Joypad {
-public:
-  static Result<PS5Joypad>
-  create(const DeviceDefinition &device = {
-             .name = "Wolf DualSense (virtual) pad", .vendor_id = 0x054C, .product_id = 0x0CE6, .version = 0x8111});
-  PS5Joypad(PS5Joypad &&j) noexcept : _state(nullptr) {
-    std::swap(j._state, _state);
-  }
-  ~PS5Joypad() override;
-
-  std::vector<std::string> get_nodes() const override;
-
-  std::string get_mac_address() const;
-
-  std::vector<std::string> get_sys_nodes() const;
-
-  void set_pressed_buttons(unsigned int newly_pressed) override;
-  void set_triggers(int16_t left, int16_t right) override;
-  void set_stick(STICK_POSITION stick_type, short x, short y) override;
-  void set_on_rumble(const std::function<void(int low_freq, int high_freq)> &callback);
-
-  static constexpr int touchpad_width = 1920;
-  static constexpr int touchpad_height = 1080;
-  void place_finger(int finger_nr, uint16_t x, uint16_t y);
-  void release_finger(int finger_nr);
 
   enum MOTION_TYPE : uint8_t {
     ACCELERATION = 0x01,
@@ -414,7 +415,12 @@ public:
    * The x/y/z axis assignments follow SDL's convention documented here:
    * https://github.com/libsdl-org/SDL/blob/96720f335002bef62115e39327940df454d78f6c/include/SDL3/SDL_sensor.h#L80-L124
    */
-  void set_motion(MOTION_TYPE type, float x, float y, float z);
+  virtual void set_motion(MOTION_TYPE /* type */, float /* x */, float /* y */, float /* z */) {}
+
+  static constexpr int touchpad_width = 1920;
+  static constexpr int touchpad_height = 1080;
+  virtual void place_finger(int /* finger_nr */, uint16_t /* x */, uint16_t /* y */) {}
+  virtual void release_finger(int /* finger_nr */) {}
 
   enum BATTERY_STATE : uint8_t {
     BATTERY_DISCHARGING = 0x0,
@@ -425,9 +431,9 @@ public:
     CHARGHING_ERROR = 0xF
   };
 
-  void set_battery(BATTERY_STATE state, int percentage);
+  virtual void set_battery(BATTERY_STATE /* state */, int /* percentage */) {}
 
-  void set_on_led(const std::function<void(int r, int g, int b)> &callback);
+  virtual void set_on_led(const std::function<void(int r, int g, int b)> & /* callback */) {}
 
   /**
    * This is an opaque blob that is sent to the controller.
@@ -446,7 +452,131 @@ public:
     std::array<uint8_t, 10> right = {};
   };
 
-  void set_on_trigger_effect(const std::function<void(const TriggerEffect &)> &callback);
+  virtual void set_on_trigger_effect(const std::function<void(const TriggerEffect &)> & /* callback */) {}
+};
+
+class XboxOneJoypad : public Joypad {
+public:
+  static Result<XboxOneJoypad> create(const DeviceDefinition &device = default_definition(TYPE::XBOX));
+  XboxOneJoypad(XboxOneJoypad &&j) noexcept : _state(nullptr) {
+    std::swap(j._state, _state);
+  }
+  ~XboxOneJoypad() override;
+
+  std::vector<std::string> get_nodes() const override;
+  std::vector<UdevEvent> get_udev_events() const override;
+  std::vector<UdevHwDbEntry> get_udev_hw_db_entries() const override;
+
+  void set_pressed_buttons(unsigned int newly_pressed) override;
+  void set_triggers(int16_t left, int16_t right) override;
+  void set_stick(STICK_POSITION stick_type, short x, short y) override;
+  void set_on_rumble(const std::function<void(int low_freq, int high_freq)> &callback) override;
+
+protected:
+  typedef struct XboxOneJoypadState XboxOneJoypadState;
+  std::shared_ptr<XboxOneJoypadState> _state;
+
+private:
+  XboxOneJoypad();
+};
+
+class SwitchJoypad : public Joypad {
+public:
+  static Result<SwitchJoypad> create(const DeviceDefinition &device = default_definition(TYPE::NINTENDO));
+  SwitchJoypad(SwitchJoypad &&j) : _state(nullptr) {
+    std::swap(j._state, _state);
+  }
+  ~SwitchJoypad() override;
+
+  std::vector<std::string> get_nodes() const override;
+  std::vector<UdevEvent> get_udev_events() const override;
+  std::vector<UdevHwDbEntry> get_udev_hw_db_entries() const override;
+
+  void set_pressed_buttons(unsigned int newly_pressed) override;
+  void set_triggers(int16_t left, int16_t right) override;
+  void set_stick(STICK_POSITION stick_type, short x, short y) override;
+  void set_on_rumble(const std::function<void(int low_freq, int high_freq)> &callback) override;
+
+protected:
+  typedef struct XboxOneJoypadState SwitchJoypadState;
+  std::shared_ptr<SwitchJoypadState> _state;
+
+private:
+  SwitchJoypad();
+};
+
+/**
+ * DualSense over uinput: buttons, sticks, triggers and rumble. No touchpad,
+ * motion, battery, LED or adaptive triggers; those keep the Joypad defaults.
+ * It only needs uinput, so Joypad::create() falls back to it when the uhid
+ * PS5Joypad can't be created. In a USE_UHID=OFF build it is also PS5Joypad.
+ */
+class PS5JoypadUinput : public Joypad {
+public:
+  static Result<PS5JoypadUinput> create(const DeviceDefinition &device = default_definition(TYPE::PS));
+  PS5JoypadUinput(PS5JoypadUinput &&j) noexcept : _state(nullptr) {
+    std::swap(j._state, _state);
+  }
+  ~PS5JoypadUinput() override;
+
+  std::vector<std::string> get_nodes() const override;
+  std::vector<UdevEvent> get_udev_events() const override;
+  std::vector<UdevHwDbEntry> get_udev_hw_db_entries() const override;
+
+  void set_pressed_buttons(unsigned int newly_pressed) override;
+  void set_triggers(int16_t left, int16_t right) override;
+  void set_stick(STICK_POSITION stick_type, short x, short y) override;
+  void set_on_rumble(const std::function<void(int low_freq, int high_freq)> &callback) override;
+
+protected:
+  typedef struct PS5JoypadUinputState PS5JoypadUinputState;
+  std::shared_ptr<PS5JoypadUinputState> _state;
+
+private:
+  PS5JoypadUinput();
+};
+
+#ifdef INPUTTINO_NO_UHID
+// Built without uhid (USE_UHID=OFF): PS5Joypad is the uinput pad, as it always was in such builds.
+using PS5Joypad = PS5JoypadUinput;
+#else
+class PS5Joypad : public Joypad {
+public:
+  static Result<PS5Joypad> create(const DeviceDefinition &device = default_definition(TYPE::PS));
+  PS5Joypad(PS5Joypad &&j) noexcept : _state(nullptr) {
+    std::swap(j._state, _state);
+    // The report thread is joined by the destructor, so it has to move with the state it writes to.
+    std::swap(j._send_input_thread, _send_input_thread);
+  }
+  ~PS5Joypad() override;
+
+  std::vector<std::string> get_nodes() const override;
+  std::vector<UdevEvent> get_udev_events() const override;
+  std::vector<UdevHwDbEntry> get_udev_hw_db_entries() const override;
+
+  std::string get_mac_address() const;
+
+  std::vector<std::string> get_sys_nodes() const;
+
+  void set_pressed_buttons(unsigned int newly_pressed) override;
+  void set_triggers(int16_t left, int16_t right) override;
+  void set_stick(STICK_POSITION stick_type, short x, short y) override;
+  void set_on_rumble(const std::function<void(int low_freq, int high_freq)> &callback) override;
+
+  void place_finger(int finger_nr, uint16_t x, uint16_t y) override;
+  void release_finger(int finger_nr) override;
+
+  bool supports_motion() const override {
+    return true;
+  }
+
+  void set_motion(MOTION_TYPE type, float x, float y, float z) override;
+
+  void set_battery(BATTERY_STATE state, int percentage) override;
+
+  void set_on_led(const std::function<void(int r, int g, int b)> &callback) override;
+
+  void set_on_trigger_effect(const std::function<void(const TriggerEffect &)> &callback) override;
 
 protected:
   typedef struct PS5JoypadState PS5JoypadState;
@@ -463,4 +593,5 @@ private:
 
   PS5Joypad(uint16_t vendor_id, std::array<unsigned char, 6> mac_address = generate_mac_address());
 };
+#endif
 } // namespace inputtino

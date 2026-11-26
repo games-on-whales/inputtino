@@ -109,7 +109,9 @@ set(PUBLIC_HEADERS
 
 if (UNIX AND NOT APPLE)
     list(APPEND SRC_LIST
+            "src/host_capability.cpp"
             "src/uinput/joypad_nintendo.cpp"
+            "src/uinput/joypad_ps.cpp"
             "src/uinput/joypad_xbox.cpp"
             "src/uinput/keyboard.cpp"
             "src/uinput/mouse.cpp"
@@ -117,17 +119,22 @@ if (UNIX AND NOT APPLE)
             "src/uinput/touchscreen.cpp"
             "src/uinput/trackpad.cpp")
 
+    # The uinput DualSense (PS5JoypadUinput) is always built, as the fallback for hosts without uhid.
     if (USE_UHID)
         message("Using uhid implementation for DualSense controller")
         list(APPEND SRC_LIST "src/uhid/joypad_ps5.cpp")
         target_include_directories(libinputtino PUBLIC "src/uhid/include/")
     else ()
         message("Using uinput implementation for DualSense controller")
-        list(APPEND SRC_LIST "src/uinput/joypad_ps.cpp")
+        # PS5Joypad becomes an alias of PS5JoypadUinput (see input.hpp), so consumers need it too.
+        target_compile_definitions(libinputtino PUBLIC INPUTTINO_NO_UHID)
+        set(PKGCONFIG_CFLAGS "-DINPUTTINO_NO_UHID")
     endif ()
 
     target_sources(libinputtino PRIVATE ${SRC_LIST})
     target_include_directories(libinputtino PUBLIC "src/uinput/include")
+    # udev_helpers.hpp, shared by the uinput and uhid joypads
+    target_include_directories(libinputtino PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
 endif ()
 
 if (BUILD_C_BINDINGS)
