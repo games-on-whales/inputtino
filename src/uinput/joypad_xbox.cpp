@@ -109,6 +109,7 @@ Result<XboxOneJoypad> XboxOneJoypad::create(const DeviceDefinition &device) {
   joypad._state->events_thread.detach();
   return joypad;
 }
+
 void XboxOneJoypad::set_pressed_buttons(unsigned int newly_pressed) {
   // Button flags that have been changed between current and prev
   auto bf_changed = newly_pressed ^ this->_state->currently_pressed_btns;

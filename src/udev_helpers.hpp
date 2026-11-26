@@ -7,7 +7,8 @@
 // device as real hardware. Kept header-only (inline) and free of libevdev so
 // both the uinput and uhid joypad backends can use them.
 
-#include <chrono>
+#include <atomic>
+#include <ctime>
 #include <filesystem>
 #include <iostream>
 #include <map>
@@ -42,12 +43,17 @@ inline std::string gen_udev_hw_db_filename(const std::string &dev_node) {
 inline std::map<std::string, std::string>
 gen_udev_base_event(const std::string &devnode, const std::string &syspath, const std::string &action = "add") {
   auto [dev_major, dev_minor] = get_major_minor(devnode);
-  auto now = std::chrono::system_clock::now();
-  auto timestamp = std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch()).count();
+  // Like udev: microseconds of CLOCK_MONOTONIC.
+  timespec now{};
+  clock_gettime(CLOCK_MONOTONIC, &now);
+  auto usec_initialized = static_cast<unsigned long long>(now.tv_sec) * 1'000'000ULL + now.tv_nsec / 1'000;
+  // The kernel's SEQNUM orders uevents system-wide; this one only orders the
+  // events inputtino generates in this process.
+  static std::atomic<unsigned long long> seqnum{0};
   return {
       {"ACTION", action},
-      {"SEQNUM", "7"}, // We don't keep global state, let's hope it's not used
-      {"USEC_INITIALIZED", std::to_string(timestamp)},
+      {"SEQNUM", std::to_string(++seqnum)},
+      {"USEC_INITIALIZED", std::to_string(usec_initialized)},
       {"SUBSYSTEM", "input"},
       {"ID_INPUT", "1"},
       {"ID_SERIAL", "noserial"},

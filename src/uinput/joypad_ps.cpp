@@ -28,7 +28,7 @@ std::vector<Joypad::UdevHwDbEntry> PS5JoypadUinput::get_udev_hw_db_entries() con
   return gen_joystick_udev_hw_db(_state);
 }
 
-static Result<libevdev_uinput_ptr> create_ps_controller(const DeviceDefinition &device) {
+Result<libevdev_uinput_ptr> create_ps_controller(const DeviceDefinition &device) {
   libevdev *dev = libevdev_new();
   libevdev_uinput *uidev;
 
@@ -107,11 +107,13 @@ Result<PS5JoypadUinput> PS5JoypadUinput::create(const DeviceDefinition &device) 
   PS5JoypadUinput joypad;
   joypad._state->joy = std::move(*joy_el);
 
-  joypad._state->events_thread = std::thread(event_listener, joypad._state);
+  auto event_thread = std::thread(event_listener, joypad._state);
+  joypad._state->events_thread = std::move(event_thread);
   joypad._state->events_thread.detach();
 
   return joypad;
 }
+
 void PS5JoypadUinput::set_pressed_buttons(unsigned int newly_pressed) {
   // Button flags that have been changed between current and prev
   auto bf_changed = newly_pressed ^ this->_state->currently_pressed_btns;
@@ -177,8 +179,18 @@ void PS5JoypadUinput::set_stick(Joypad::STICK_POSITION stick_type, short x, shor
 
 void PS5JoypadUinput::set_triggers(int16_t left, int16_t right) {
   if (auto controller = this->_state->joy.get()) {
-    libevdev_uinput_write_event(controller, EV_ABS, ABS_Z, left);
-    libevdev_uinput_write_event(controller, EV_ABS, ABS_RZ, right);
+    if (left > 0) {
+      libevdev_uinput_write_event(controller, EV_ABS, ABS_Z, left);
+    } else {
+      libevdev_uinput_write_event(controller, EV_ABS, ABS_Z, left);
+    }
+
+    if (right > 0) {
+      libevdev_uinput_write_event(controller, EV_ABS, ABS_RZ, right);
+    } else {
+      libevdev_uinput_write_event(controller, EV_ABS, ABS_RZ, right);
+    }
+
     libevdev_uinput_write_event(controller, EV_SYN, SYN_REPORT, 0);
   }
 }
@@ -187,8 +199,7 @@ void PS5JoypadUinput::set_on_rumble(const std::function<void(int, int)> &callbac
   this->_state->on_rumble = callback;
 }
 
-// Touchpad, motion, battery, LED and adaptive triggers aren't available on the
-// plain uinput backend; the Joypad base provides no-op defaults for them and
-// supports_motion() stays false.
+// Touchpad, motion, battery, LED and adaptive triggers need the uhid PS5Joypad;
+// here they keep the Joypad defaults, which do nothing.
 
 } // namespace inputtino

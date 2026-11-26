@@ -1,5 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 #include <inputtino/input.hpp>
+#include <type_traits>
 
 using namespace inputtino;
 
@@ -20,8 +21,8 @@ TEST_CASE("uinput DualSense pad: no rich features, safe no-ops, self-describes",
   // The uinput backend has no motion; the rich setters inherited from the
   // Joypad base must be safe no-ops rather than crash.
   REQUIRE_FALSE(joypad.supports_motion());
-  joypad.set_accel(1.f, 2.f, 3.f);
-  joypad.set_gyro(1.f, 2.f, 3.f);
+  joypad.set_motion(Joypad::ACCELERATION, 1.f, 2.f, 3.f);
+  joypad.set_motion(Joypad::GYROSCOPE, 1.f, 2.f, 3.f);
   joypad.set_battery(Joypad::BATTERY_FULL, 100);
   joypad.place_finger(0, 10, 10);
   joypad.release_finger(0);
@@ -46,7 +47,7 @@ TEST_CASE("uinput Nintendo pad: no motion, self-describes", "[Factory]") {
   auto joypad = std::move(*created);
 
   REQUIRE_FALSE(joypad.supports_motion());
-  joypad.set_gyro(0.f, 0.f, 0.f); // no-op, must not crash
+  joypad.set_motion(Joypad::GYROSCOPE, 0.f, 0.f, 0.f); // no-op, must not crash
   REQUIRE_FALSE(joypad.get_udev_events().empty());
 }
 
@@ -67,6 +68,12 @@ TEST_CASE("Joypad::create returns a usable pad through the Joypad base", "[Facto
   REQUIRE_FALSE((*xbox)->get_udev_events().empty());
 }
 
+#ifdef INPUTTINO_NO_UHID
+TEST_CASE("Without uhid, PS5Joypad is the uinput pad", "[Factory]") {
+  STATIC_REQUIRE(std::is_same_v<PS5Joypad, PS5JoypadUinput>);
+}
+#endif
+
 #ifdef USE_UHID
 TEST_CASE("Joypad::create picks the rich uhid backend when preferred", "[Factory][UHID]") {
   if (!is_uhid_supported()) {
@@ -78,5 +85,8 @@ TEST_CASE("Joypad::create picks the rich uhid backend when preferred", "[Factory
   auto ps = Joypad::create(Joypad::TYPE::PS, /* prefer_uhid */ true);
   REQUIRE(ps);
   REQUIRE((*ps)->supports_motion());
+  REQUIRE(dynamic_cast<PS5Joypad *>((*ps).get()) != nullptr);
+  // Reaches PS5Joypad::set_motion through the base class.
+  (*ps)->set_motion(Joypad::GYROSCOPE, 0.f, 1.f, 2.f);
 }
 #endif

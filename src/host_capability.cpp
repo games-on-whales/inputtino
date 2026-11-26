@@ -1,6 +1,4 @@
-// Runtime probes for host-level input capabilities plus the runtime joypad
-// factory, used by callers that want to pick between uhid- and uinput-backed
-// virtual devices based on what the kernel actually exposes here.
+// The /dev/uhid probe and Joypad::create(), which picks a uhid or uinput pad at runtime.
 
 #include <fcntl.h>
 #include <inputtino/input.hpp>
@@ -11,9 +9,8 @@
 namespace inputtino {
 
 bool is_uhid_supported() {
-  // Cached once per process — UHID node presence doesn't change at
-  // runtime on any sane host, and probing on every controller
-  // creation would add ~200us of open/close per join.
+  // Probed once: it only says whether the node opens, and Joypad::create()
+  // falls back to uinput anyway when creating the uhid pad fails.
   static const bool supported = []() {
     int fd = open("/dev/uhid", O_RDWR | O_CLOEXEC);
     if (fd < 0) {
@@ -41,11 +38,19 @@ template <typename T> Result<std::unique_ptr<Joypad>> as_joypad(Result<T> create
 DeviceDefinition Joypad::default_definition(Joypad::TYPE kind) {
   switch (kind) {
   case Joypad::TYPE::XBOX:
-    return {.name = "Wolf X-Box One (virtual) pad", .vendor_id = 0x045E, .product_id = 0x02EA, .version = 0x0408};
+    return {.name = "Wolf X-Box One (virtual) pad",
+            // https://github.com/torvalds/linux/blob/master/drivers/input/joystick/xpad.c#L147
+            .vendor_id = 0x045E,
+            .product_id = 0x02EA,
+            .version = 0x0408};
   case Joypad::TYPE::PS:
     return {.name = "Wolf DualSense (virtual) pad", .vendor_id = 0x054C, .product_id = 0x0CE6, .version = 0x8111};
   case Joypad::TYPE::NINTENDO:
-    return {.name = "Wolf Nintendo (virtual) pad", .vendor_id = 0x057e, .product_id = 0x2009, .version = 0x8111};
+    return {.name = "Wolf Nintendo (virtual) pad",
+            // https://github.com/torvalds/linux/blob/master/drivers/hid/hid-ids.h#L981
+            .vendor_id = 0x057e,
+            .product_id = 0x2009,
+            .version = 0x8111};
   }
   return {};
 }
@@ -60,7 +65,7 @@ Result<std::unique_ptr<Joypad>> Joypad::create(Joypad::TYPE kind, const DeviceDe
     // uinput-only; there is no uhid Xbox backend.
     return as_joypad(XboxOneJoypad::create(device));
   case Joypad::TYPE::PS:
-#ifdef INPUTTINO_USE_UHID
+#ifndef INPUTTINO_NO_UHID
     if (prefer_uhid) {
       if (auto pad = PS5Joypad::create(device)) {
         return std::unique_ptr<Joypad>(std::make_unique<PS5Joypad>(std::move(*pad)));
@@ -74,8 +79,7 @@ Result<std::unique_ptr<Joypad>> Joypad::create(Joypad::TYPE kind, const DeviceDe
 #endif
     return as_joypad(PS5JoypadUinput::create(device));
   case Joypad::TYPE::NINTENDO:
-    // uinput-only for now; the uhid Switch backend lands in a follow-up PR.
-    (void)prefer_uhid;
+    // uinput-only; there is no uhid Nintendo backend.
     return as_joypad(SwitchJoypad::create(device));
   }
   return Error("Joypad::create: unknown Joypad::TYPE");

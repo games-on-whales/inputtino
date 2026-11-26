@@ -13,5 +13,5 @@ Version: @PROJECT_VERSION@
 
 Requires:
 Libs: -L${libdir} -llibevdev
-Cflags: -I${includedir}
+Cflags: -I${includedir} @PKGCONFIG_CFLAGS@
 

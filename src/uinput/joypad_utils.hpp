@@ -171,7 +171,6 @@ static void event_listener(const std::shared_ptr<BaseJoypadState> &state) {
   std::array<pollfd, 1> pfds = {pollfd{.fd = uinput_fd, .events = POLLIN}};
   int poll_rs = 0;
 
-  // Keep listening until the joypad is being torn down (stop_listening_events).
   while (!state->stop_listening_events) {
     poll_rs = poll(pfds.data(), pfds.size(), RUMBLE_POLL_TIMEOUT);
     if (poll_rs < 0) {
@@ -245,17 +244,15 @@ static void event_listener(const std::shared_ptr<BaseJoypadState> &state) {
   }
 }
 
-// Build the udev metadata for a plain uinput joystick (Xbox / uinput PS / uinput
-// Nintendo): a base "add" event per child node tagged as a joystick, plus a
-// single hwdb entry for the main node. Shared by the uinput joypad backends so
-// each one's get_udev_events()/get_udev_hw_db_entries() is a one-liner.
-static std::vector<Joypad::UdevEvent> gen_joystick_udev_events(const std::shared_ptr<BaseJoypadState> &state) {
+// udev metadata of a uinput joypad: an "add" event per child node, tagged as a
+// joystick, and a hwdb entry for the main node.
+inline std::vector<Joypad::UdevEvent> gen_joystick_udev_events(const std::shared_ptr<BaseJoypadState> &state) {
   std::vector<Joypad::UdevEvent> events;
   if (auto joy = state->joy.get()) {
+    std::string base_syspath = libevdev_uinput_get_syspath(joy);
+    base_syspath.erase(0, 4); // strip leading /sys
     for (const auto &devnode : get_child_dev_nodes(joy)) {
-      std::string syspath = libevdev_uinput_get_syspath(joy);
-      syspath.erase(0, 4); // strip leading /sys
-      syspath.append("/" + std::filesystem::path(devnode).filename().string());
+      auto syspath = base_syspath + "/" + std::filesystem::path(devnode).filename().string();
       auto event = gen_udev_base_event(devnode, syspath);
       event["ID_INPUT_JOYSTICK"] = "1";
       event[".INPUT_CLASS"] = "joystick";
@@ -265,7 +262,7 @@ static std::vector<Joypad::UdevEvent> gen_joystick_udev_events(const std::shared
   return events;
 }
 
-static std::vector<Joypad::UdevHwDbEntry> gen_joystick_udev_hw_db(const std::shared_ptr<BaseJoypadState> &state) {
+inline std::vector<Joypad::UdevHwDbEntry> gen_joystick_udev_hw_db(const std::shared_ptr<BaseJoypadState> &state) {
   std::vector<Joypad::UdevHwDbEntry> result;
   if (auto joy = state->joy.get()) {
     result.push_back({gen_udev_hw_db_filename(libevdev_uinput_get_devnode(joy)),

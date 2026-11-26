@@ -37,7 +37,7 @@ static void send_report(PS5JoypadState &state) {
     state.current_state.sensor_timestamp = htole32(now / 333);
   }
 
-  struct uhid_event ev {};
+  struct uhid_event ev{};
   {
     ev.type = UHID_INPUT2;
 
@@ -72,12 +72,7 @@ static void send_report(PS5JoypadState &state) {
               &ev.u.input2.data[end_of_msg]);
   }
 
-  // Serialise access to state.dev between the control thread (client
-  // motion/buttons) and the report-pump thread.
-  std::lock_guard<std::mutex> lock(state.mtx);
-  if (state.dev) {
-    state.dev->send(ev);
-  }
+  state.dev->send(ev);
 }
 
 static void on_uhid_event(std::shared_ptr<PS5JoypadState> state, uhid_event ev, int fd) {
@@ -246,6 +241,9 @@ PS5Joypad::~PS5Joypad() {
   }
 }
 
+static std::vector<std::string>
+find_sys_nodes(const std::string &target_mac, uint16_t vendor_id, bool report_missing);
+
 Result<PS5Joypad> PS5Joypad::create(const DeviceDefinition &device) {
   bool use_bluetooth = true; // TODO: expose this
 
@@ -293,25 +291,33 @@ Result<PS5Joypad> PS5Joypad::create(const DeviceDefinition &device) {
   if (dev) {
     joypad._state->is_bluetooth = use_bluetooth;
     joypad._state->dev = std::make_shared<uhid::Device>(std::move(*dev));
-    // Keep the resolved definition alongside the device state.
-    joypad._state->def = def;
 
     // Readers will expect frequent events event if the state hasn't changed.
-    // The thread is kept joinable (see the move constructor) so it can be stopped cleanly before the device it
-    // writes to is destroyed on teardown.
-    joypad._send_input_thread = uhid_joypad::start_report_pump<PS5JoypadState>(
-        joypad._state,
-        [](PS5JoypadState &s) { send_report(s); },
-        std::chrono::milliseconds(10));
+    // Not detached: the destructor joins it before destroying the device it writes to.
+    joypad._send_input_thread = std::thread([state = joypad._state]() {
+      while (!state->stop_repeat_thread) {
+        send_report(*state);
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+      }
+    });
 
-    // Only return once the kernel (hid-playstation) has exposed the device's
-    // input/hidraw nodes in sysfs, so callers reading get_udev_events()/get_nodes()
-    // right away (e.g. plugging the pad into a container) see a bound device.
-    uhid_joypad::wait_for_sys_nodes([&joypad]() { return joypad.get_sys_nodes(); });
+    // Return once the kernel driver has exposed the input nodes, so that get_nodes() and get_udev_events()
+    // right after create() see all of them. That usually takes a few ms.
+    const auto mac_address = joypad.get_mac_address();
+    for (int attempt = 0; find_sys_nodes(mac_address, device.vendor_id, false).empty(); attempt++) {
+      if (attempt == 20) {
+        std::cerr << "inputtino: the input nodes of DualSense " << mac_address << " didn't appear within 1s"
+                  << std::endl;
+        break;
+      }
+      std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    }
+
     return joypad;
   }
   return Error(dev.getErrorMessage());
 }
+
 static int scale_value(int input, int input_start, int input_end, int output_start, int output_end) {
   auto slope = 1.0 * (output_end - output_start) / (input_end - input_start);
   return output_start + std::round(slope * (input - input_start));
@@ -339,17 +345,17 @@ std::string PS5Joypad::get_mac_address() const {
  * @returns a list of paths to the created input devices ex:
  * /sys/devices/virtual/misc/uhid/0003:054C:0CE6.000D/input/input58/
  */
-std::vector<std::string> PS5Joypad::get_sys_nodes() const {
+static std::vector<std::string>
+find_sys_nodes(const std::string &target_mac, uint16_t vendor_id, bool report_missing) {
   std::vector<std::string> nodes;
   auto base_path = "/sys/devices/virtual/misc/uhid/";
-  auto target_mac = get_mac_address();
   if (std::filesystem::exists(base_path)) {
     auto uhid_entries = std::filesystem::directory_iterator{base_path};
     for (auto uhid_entry : uhid_entries) {
       // Here we are looking for a directory that has a name like {BUS_ID}:{VENDOR_ID}:{PRODUCT_ID}.xxxx
       // (ex: 0003:054C:0CE6.000D)
       auto uhid_candidate_path = uhid_entry.path().filename().string();
-      auto target_id = to_hex(this->_state->vendor_id);
+      auto target_id = to_hex(vendor_id);
       if (uhid_entry.is_directory() && uhid_candidate_path.find(target_id) != std::string::npos) {
         // Found a match! Let's scan the input devices in that directory
         if (std::filesystem::exists(uhid_entry.path() / "input")) {
@@ -367,20 +373,24 @@ std::vector<std::string> PS5Joypad::get_sys_nodes() const {
                 if (line == target_mac) {
                   nodes.push_back(dev_entry.path().string());
                 }
-              } else {
+              } else if (report_missing) {
                 fprintf(stderr, "Unable to get joypad nodes, path %s does not exist\n", dev_uniq_path.string().c_str());
               }
             }
           }
-        } else {
+        } else if (report_missing) {
           fprintf(stderr, "Unable to get joypad nodes, path %s does not exist\n", uhid_entry.path().string().c_str());
         }
       }
     }
-  } else {
+  } else if (report_missing) {
     fprintf(stderr, "Unable to get joypad nodes, path %s does not exist\n", base_path);
   }
   return nodes;
+}
+
+std::vector<std::string> PS5Joypad::get_sys_nodes() const {
+  return find_sys_nodes(get_mac_address(), _state->vendor_id, true);
 }
 
 std::vector<std::string> PS5Joypad::get_nodes() const {
@@ -521,42 +531,24 @@ static __le16 to_le_signed(float original, float value) {
 }
 
 void PS5Joypad::set_motion(PS5Joypad::MOTION_TYPE type, float x, float y, float z) {
-  // Legacy shim over the generic motion API (single code path). Accel is m/s^2
-  // in both, so it forwards unchanged; gyro arrives here in rad/s but set_gyro()
-  // takes deg/s, so convert rad->deg first. The rad->deg->rad round-trip inside
-  // set_gyro() is exact at the report's int16 quantization, so output is
-  // unchanged for existing callers (e.g. Sunshine).
   switch (type) {
-  case ACCELERATION:
-    set_accel(x, y, z);
+  case ACCELERATION: {
+    this->_state->current_state.accel[0] = to_le_signed(x, (x * uhid::SDL_STANDARD_GRAVITY_CONST * 100));
+    this->_state->current_state.accel[1] = to_le_signed(y, (y * uhid::SDL_STANDARD_GRAVITY_CONST * 100));
+    this->_state->current_state.accel[2] = to_le_signed(z, (z * uhid::SDL_STANDARD_GRAVITY_CONST * 100));
+
+    send_report(*this->_state);
     break;
+  }
   case GYROSCOPE: {
-    constexpr float RAD_TO_DEG = 180.0f / static_cast<float>(M_PI);
-    set_gyro(x * RAD_TO_DEG, y * RAD_TO_DEG, z * RAD_TO_DEG);
+    this->_state->current_state.gyro[0] = to_le_signed(x, x * uhid::gyro_resolution);
+    this->_state->current_state.gyro[1] = to_le_signed(y, y * uhid::gyro_resolution);
+    this->_state->current_state.gyro[2] = to_le_signed(z, z * uhid::gyro_resolution);
+
+    send_report(*this->_state);
     break;
   }
   }
-}
-
-void PS5Joypad::set_gyro(float x, float y, float z) {
-  // Callers pass gyro in deg/s (the SDL / Moonlight convention); the DualSense
-  // HID report is calibrated in rad/s, so the deg->rad conversion lives here
-  // rather than in every caller.
-  constexpr float DEG_TO_RAD = static_cast<float>(M_PI) / 180.0f;
-  this->_state->current_state.gyro[0] = to_le_signed(x, x * DEG_TO_RAD * uhid::gyro_resolution);
-  this->_state->current_state.gyro[1] = to_le_signed(y, y * DEG_TO_RAD * uhid::gyro_resolution);
-  this->_state->current_state.gyro[2] = to_le_signed(z, z * DEG_TO_RAD * uhid::gyro_resolution);
-
-  send_report(*this->_state);
-}
-
-void PS5Joypad::set_accel(float x, float y, float z) {
-  // Accelerometer in m/s^2 (inclusive of gravity); legacy set_motion(ACCELERATION, ...) forwards here.
-  this->_state->current_state.accel[0] = to_le_signed(x, (x * uhid::SDL_STANDARD_GRAVITY_CONST * 100));
-  this->_state->current_state.accel[1] = to_le_signed(y, (y * uhid::SDL_STANDARD_GRAVITY_CONST * 100));
-  this->_state->current_state.accel[2] = to_le_signed(z, (z * uhid::SDL_STANDARD_GRAVITY_CONST * 100));
-
-  send_report(*this->_state);
 }
 
 void PS5Joypad::set_battery(PS5Joypad::BATTERY_STATE state, int percentage) {
